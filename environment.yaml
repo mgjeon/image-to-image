@@ -1,0 +1,23 @@
+name: img2img
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+dependencies:
+  - python=3.10
+  - ipykernel
+  - ipywidgets
+  - numpy
+  - matplotlib
+  - pandas
+  - pytorch
+  - torchvision
+  - torchaudio
+  - pytorch-cuda=11.8
+  - lightning
+  - sunpy
+  - setproctitle
+  - tqdm
+  - albumentations
+  - pyyaml
+  - tensorboard

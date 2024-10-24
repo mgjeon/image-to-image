@@ -5,7 +5,7 @@ data:
     target_dir: ../datasets/facades/train/B
     batch_size: 4
     shuffle: true
-    num_workers: 0
+    num_workers: 4
     pin_memory: true
     drop_last: true
   val:
@@ -37,8 +37,8 @@ lightning:
   seed: 42
   float32_matmul_precision: "high"
   accelerator: "cuda"
-  devices: [0]
-  precision: "16-mixed"
+  devices: [2,3]
+  precision: "32-true"
   strategy: "ddp_find_unused_parameters_true"
 params:
   optimizer:
@@ -52,8 +52,8 @@ params:
       lambda: 100
     discriminator:
       name: BCEWithLogitsLoss
-  num_epochs: 100
+  num_epochs: 10
   save_img_per_epoch: 1
-  save_state_per_epoch: 1
+  save_state_per_epoch: 5
   output_dir: ./checkpoints/default_lightning
   resume_from: null

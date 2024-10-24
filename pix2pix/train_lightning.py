@@ -48,13 +48,7 @@ if __name__ == "__main__":
             
             output_dir = Path(cfg['params']['output_dir'])
             self.output_dir = output_dir
-            self.output_image_train_dir = output_dir / "images" / "train"
-            self.output_image_val_dir = output_dir / "images" / "val"
-            self.output_model_dir = output_dir / "models"
             self.output_dir.mkdir(parents=True, exist_ok=True)
-            self.output_image_train_dir.mkdir(parents=True, exist_ok=True)
-            self.output_image_val_dir.mkdir(parents=True, exist_ok=True)
-            self.output_model_dir.mkdir(parents=True, exist_ok=True)
 
         def setup(self, stage):
             if stage == 'fit':
@@ -68,6 +62,12 @@ if __name__ == "__main__":
                     self.cfg['data']['val']['target_dir'],
                     self.cfg['data']['ext'],
                 )
+
+            output_image_dir = self.output_dir / "images" / f"version_{self.loggers[0].version}"
+            self.output_image_train_dir = output_image_dir / "train"
+            self.output_image_val_dir = output_image_dir / "val"
+            self.output_image_train_dir.mkdir(parents=True, exist_ok=True)
+            self.output_image_val_dir.mkdir(parents=True, exist_ok=True)
         
         def train_dataloader(self):
             return DataLoader(
@@ -145,7 +145,7 @@ if __name__ == "__main__":
                         self.train_dataset.save_image(fake_target[0], self.output_image_train_dir/f"{self.current_epoch}_{self.global_step}_fake.png")
                         self.train_dataset.save_image(real_target[0], self.output_image_train_dir/f"{self.current_epoch}_{self.global_step}_real.png")
                         train_fig = self.train_dataset.create_figure(inputs[0], real_target[0], fake_target[0])
-                        self.logger.experiment.add_figure('train', train_fig, self.current_epoch)
+                        self.logger.experiment.add_figure('train', train_fig, self.global_step)
                         break
                     for inputs, real_target in self.val_dataloader():
                         inputs = inputs.to(self.device)
@@ -153,10 +153,10 @@ if __name__ == "__main__":
                         self.val_dataset.save_image(fake_target[0], self.output_image_val_dir/f"{self.current_epoch}_{self.global_step}_fake.png")
                         self.val_dataset.save_image(real_target[0], self.output_image_val_dir/f"{self.current_epoch}_{self.global_step}_real.png")
                         val_fig = self.val_dataset.create_figure(inputs[0], real_target[0], fake_target[0])
-                        self.logger.experiment.add_figure('val', val_fig, self.current_epoch)
+                        self.logger.experiment.add_figure('val', val_fig, self.global_step)
                         break
                 self.net_G.train()
-            
+
     model = Pix2Pix(cfg)
 
     checkpoint_callback = ModelCheckpoint(
@@ -165,7 +165,7 @@ if __name__ == "__main__":
     )
 
     trainer = L.Trainer(
-        default_root_dir=model.output_model_dir,
+        default_root_dir=model.output_dir,
         callbacks=[checkpoint_callback],
         max_epochs=cfg['params']['num_epochs'],
         accelerator=cfg['lightning']['accelerator'],

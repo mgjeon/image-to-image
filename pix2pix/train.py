@@ -1,4 +1,5 @@
 # Import =======================================================================
+import os
 import logging
 from pathlib import Path
 from datetime import datetime
@@ -63,6 +64,8 @@ if __name__ == "__main__":
     with open(output_dir / "config.yaml", "w") as file:
         yaml.dump(cfg, file)
 
+    os.environ['CUDA_VISIBLE_DEVICES'] = params['gpus']
+
 # Tensorboard ==================================================================
     log_dir = output_dir / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -80,8 +83,10 @@ if __name__ == "__main__":
 # Model, Optimizer, Loss, Dataset, DataLoader ==================================
     device = torch.device(params['device'])
 
-    net_G = define_G(cfg).to(device)
-    net_D = define_D(cfg).to(device)
+    net_G = define_G(cfg)
+    net_D = define_D(cfg)
+    net_G = torch.nn.DataParallel(net_G).to(device)
+    net_D = torch.nn.DataParallel(net_D).to(device)
 
     if params['optimizer']['name'] == "Adam":
         args = params['optimizer']['args']
@@ -109,9 +114,10 @@ if __name__ == "__main__":
     train_loader = DataLoader(
         train_dataset, 
         batch_size=data['train']['batch_size'], 
-        shuffle=True,
+        shuffle=data['train']['shuffle'],
         num_workers=data['train']['num_workers'],
-        drop_last=True
+        pin_memory=data['train']['pin_memory'],
+        drop_last=data['train']['drop_last']
     )
 
     val_dataset = AlignedDataset(
@@ -122,9 +128,10 @@ if __name__ == "__main__":
     val_loader = DataLoader(
         val_dataset, 
         batch_size=data['val']['batch_size'], 
-        shuffle=False,
+        shuffle=data['val']['shuffle'],
         num_workers=data['val']['num_workers'],
-        drop_last=False
+        pin_memory=data['val']['pin_memory'],
+        drop_last=data['val']['drop_last']
     )
 
 # Setup Training ===============================================================
