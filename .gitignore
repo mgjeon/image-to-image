@@ -1,0 +1,6 @@
+**/__pycache__/
+**/checkpoints/
+**/datasets/
+**/*.png
+**/*.jpg
+**/*.tar.gz
