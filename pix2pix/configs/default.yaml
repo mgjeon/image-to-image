@@ -1,0 +1,52 @@
+data:
+  ext: jpg
+  train:
+    input_dir: ./datasets/facades/train/A
+    target_dir: ./datasets/facades/train/B
+    batch_size: 1
+    num_workers: 0
+  val:
+    input_dir: ./datasets/facades/val/A
+    target_dir: ./datasets/facades/val/B
+    batch_size: 1
+    num_workers: 0
+  test:
+    input_dir: ./datasets/facades/test/A
+    target_dir: ./datasets/facades/test/B
+    batch_size: 1
+    num_workers: 0
+model:
+  generator:
+    name: simple_G
+    args:
+      in_channels: 3
+      out_channels: 3
+      features: 64
+  discriminator:
+    name: simple_D
+    args:
+      in_channels: 6
+      features: [64, 128, 256, 512]
+params:
+  seed: 42
+  float32_matmul_precision: "high"
+  device: "cuda"
+  optimizer:
+    name: Adam
+    args:
+      lr: 0.0002
+      betas: [0.5, 0.999]
+  loss:
+    generator:
+      name: L1Loss
+      lambda: 100
+    discriminator:
+      name: BCEWithLogitsLoss
+  num_epochs: 100
+  log_per_iteration: 100
+  save_img_per_epoch: 1
+  save_state_per_epoch: 1
+  output_dir: ./checkpoints/default
+  resume: true
+  resume_from: null
+  output_dir_resume_from: null
