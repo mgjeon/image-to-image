@@ -1,0 +1,13 @@
+original_path: sdo
+preprocessed_path: aia_prep
+wavelengths: [171, 193, 304]
+months: null
+years: null
+ext: .fits
+resolution: 1024
+radius_padding_factor: 0.28
+rotate_north_up: True
+crop: True
+calibration: aiapy
+LoLim: 0
+UpLim: 14
