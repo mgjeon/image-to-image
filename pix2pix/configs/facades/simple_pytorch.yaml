@@ -1,5 +1,6 @@
 data:
   ext: jpg
+  image_size: 256
   train:
     input_dir: ../datasets/facades/train/A
     target_dir: ../datasets/facades/train/B

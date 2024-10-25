@@ -39,7 +39,7 @@ def calculate_metrics(model, loader, device, log_dir, binning=4, stage="Validati
     for i, (inputs, real_target) in enumerate(tqdm(loader, desc=stage)):
         inputs = inputs.to(device)
         real_target = real_target.to(device)
-        fake_target = G(inputs)
+        fake_target = model(inputs)
         if i == 0:
             fig = val_dataset.create_figure(inputs[0], real_target[0], fake_target[0])
             fig.savefig(log_dir / f"{stage}_example.png")
@@ -130,6 +130,8 @@ if __name__ == "__main__":
 
     with open(args.config) as file:
         cfg = yaml.safe_load(file)
+        if cfg.get('cfg') is not None:
+            cfg = cfg['cfg']  
         data = cfg['data']
         params = cfg['params']
 
@@ -139,9 +141,10 @@ if __name__ == "__main__":
     G = G.to(device)
 
     val_dataset = AlignedDataset(
-        data['val']['input_dir'], 
-        data['val']['target_dir'],
-        data['ext']
+        input_dir=data['val']['input_dir'], 
+        target_dir=data['val']['target_dir'],
+        image_size=data['image_size'],
+        ext=data['ext']
     )
     val_loader = DataLoader(
         val_dataset, 
@@ -153,9 +156,10 @@ if __name__ == "__main__":
     )
 
     test_dataset = AlignedDataset(
-        data['test']['input_dir'], 
-        data['test']['target_dir'],
-        data['ext']
+        input_dir=data['test']['input_dir'], 
+        target_dir=data['test']['target_dir'],
+        image_size=data['image_size'],
+        ext=data['ext']
     )
     test_loader = DataLoader(
         test_dataset, 

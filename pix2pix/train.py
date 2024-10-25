@@ -46,14 +46,16 @@ class Pix2Pix(L.LightningModule):
     def setup(self, stage):
         if stage == 'fit':
             self.train_dataset = AlignedDataset(
-                self.cfg['data']['train']['input_dir'],
-                self.cfg['data']['train']['target_dir'],
-                self.cfg['data']['ext'],
+                input_dir=self.cfg['data']['train']['input_dir'],
+                target_dir=self.cfg['data']['train']['target_dir'],
+                image_size=self.cfg['data']['image_size'],
+                ext=self.cfg['data']['ext'],
             )
             self.val_dataset = AlignedDataset(
-                self.cfg['data']['val']['input_dir'],
-                self.cfg['data']['val']['target_dir'],
-                self.cfg['data']['ext'],
+                input_dir=self.cfg['data']['val']['input_dir'],
+                target_dir=self.cfg['data']['val']['target_dir'],
+                image_size=self.cfg['data']['image_size'],
+                ext=self.cfg['data']['ext'],
             )
 
         output_image_dir = self.output_dir / "images" / f"version_{self.loggers[0].version}"
@@ -158,7 +160,7 @@ class Pix2Pix(L.LightningModule):
                     break
             self.net_G.train()
 
-        if self.current_epoch % self.cfg['params']['save_state_per_epoch'] == 0:
+        if self.current_epoch % self.cfg['params']['save_state_per_epoch'] == 0 or self.current_epoch == self.cfg['params']['num_epochs']-1:
             global_step = self.global_step // 2  # self.global_step is the number of optimizer steps taken, in this case 2 steps per iteration because of the multi-optimizer training
             ckpt_path = Path(self.loggers[0].log_dir)/"checkpoints"
             if not ckpt_path.exists(): ckpt_path.mkdir(parents=True, exist_ok=True)
@@ -171,7 +173,8 @@ if __name__ == "__main__":
     parser.add_argument('--config', type=str, required=True)
     args = parser.parse_args()
     with open(args.config) as file:
-        cfg = yaml.safe_load(file)
+        cfg = yaml.safe_load(file)  
+
 
 # Seed =========================================================================
     L.seed_everything(cfg['params']['seed'])

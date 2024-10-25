@@ -1,5 +1,6 @@
 data:
   ext: jpg
+  image_size: 256
   train:
     input_dir: ../datasets/facades/train/A
     target_dir: ../datasets/facades/train/B
@@ -20,19 +21,32 @@ data:
     input_dir: ../datasets/facades/test/A
     target_dir: ../datasets/facades/test/B
     batch_size: 1
+    shuffle: false
     num_workers: 0
+    pin_memory: true
+    drop_last: false
 model:
   generator:
-    name: simple_G
+    name: resnet
     args:
-      in_channels: 3
-      out_channels: 3
-      features: 64
+      input_nc: 3
+      output_nc: 3
+      ngf: 64
+      norm_layer: instance
+      use_dropout: false
+      n_blocks: 6
+      padding_type: reflect
+      init_type: normal
+      init_gain: 0.02
   discriminator:
-    name: simple_D
+    name: patchgan
     args:
-      in_channels: 6
-      features: [64, 128, 256, 512]
+      input_nc: 6
+      ndf: 64
+      n_layers: 3
+      norm_layer: instance
+      init_type: normal
+      init_gain: 0.02
 params:
   optimizer:
     name: Adam

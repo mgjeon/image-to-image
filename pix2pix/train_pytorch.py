@@ -96,9 +96,10 @@ if __name__ == "__main__":
     
 # Dataset, DataLoader ==========================================================
     train_dataset = AlignedDataset(
-        data['train']['input_dir'], 
-        data['train']['target_dir'],
-        data['ext']
+        input_dir=data['train']['input_dir'], 
+        target_dir=data['train']['target_dir'],
+        image_size=data['image_size'],
+        ext=data['ext']
     )
     train_loader = DataLoader(
         train_dataset, 
@@ -110,9 +111,10 @@ if __name__ == "__main__":
     )
 
     val_dataset = AlignedDataset(
-        data['val']['input_dir'], 
-        data['val']['target_dir'],
-        data['ext']
+        input_dir=data['val']['input_dir'], 
+        target_dir=data['val']['target_dir'],
+        image_size=data['image_size'],
+        ext=data['ext']
     )
     val_loader = DataLoader(
         val_dataset, 
@@ -165,7 +167,7 @@ if __name__ == "__main__":
         for i, (inputs, real_target) in enumerate(train_loop):
             # print(i)
             # print(inputs.shape)
-            # print(targets.shape)
+            # print(real_target.shape)
             # import sys
             # sys.exit()
 
