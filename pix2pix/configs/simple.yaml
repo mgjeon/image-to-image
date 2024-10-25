@@ -45,7 +45,7 @@ params:
       lambda: 100
     discriminator:
       name: BCEWithLogitsLoss
-  num_epochs: 100
+  num_epochs: 50
   log_per_iteration: 10
   save_img_per_epoch: 1
   save_state_per_epoch: 50

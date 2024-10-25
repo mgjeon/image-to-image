@@ -1,0 +1,66 @@
+data:
+  ext: jpg
+  train:
+    input_dir: ../datasets/facades/train/A
+    target_dir: ../datasets/facades/train/B
+    batch_size: 4
+    shuffle: true
+    num_workers: 4
+    pin_memory: true
+    drop_last: true
+  val:
+    input_dir: ../datasets/facades/val/A
+    target_dir: ../datasets/facades/val/B
+    batch_size: 1
+    shuffle: false
+    num_workers: 0
+    pin_memory: true
+    drop_last: false
+  test:
+    input_dir: ../datasets/facades/test/A
+    target_dir: ../datasets/facades/test/B
+    batch_size: 1
+    num_workers: 0
+model:
+  generator:
+    name: resnet
+    args:
+      input_nc: 3
+      output_nc: 3
+      ngf: 64
+      norm_layer: instance
+      use_dropout: false
+      n_blocks: 6
+      padding_type: reflect
+  discriminator:
+    name: patchgan
+    args:
+      input_nc: 6
+      ndf: 64
+      n_layers: 3
+      norm_layer: instance
+params:
+  optimizer:
+    name: Adam
+    args:
+      lr: 0.0002
+      betas: [0.5, 0.999]
+  loss:
+    generator:
+      name: L1Loss
+      lambda: 100
+    discriminator:
+      name: BCEWithLogitsLoss
+  num_epochs: 50
+  log_per_iteration: 10
+  save_img_per_epoch: 1
+  save_state_per_epoch: 50
+  save_top_k: -1
+  seed: 42
+  float32_matmul_precision: "high"
+  accelerator: "cuda"
+  devices: [0]
+  precision: "32-true"
+  strategy: "auto"
+  output_dir: ./results/default_lightning
+  resume_from: null
