@@ -1,8 +1,8 @@
 # Import =======================================================================
 import os
 import logging
+import argparse
 from pathlib import Path
-from datetime import datetime
 from time import perf_counter
 import yaml
 from tqdm import tqdm
@@ -16,78 +16,63 @@ from pipeline import AlignedDataset
 from networks import define_G, define_D
 
 
-# Create timestamped output folder ============================================
-# def create_timestamped_folder(output_dir, resume=False):
-#     output_dir = Path(output_dir)
-#     if not output_dir.exists():
-#         output_dir.mkdir(parents=True)
-
-#     # Check existing folders that follow the pattern "YYYYMMDD_HHMMSS"
-#     timestamp_folders = [f for f in output_dir.iterdir() if f.is_dir() and len(f.name) == 15 and f.name[:8].isdigit() and f.name[9:].isdigit()]
-    
-#     if timestamp_folders:
-#         # Sort folders by timestamp (latest first)
-#         timestamp_folders.sort(key=lambda x: x.name, reverse=True)
-        
-#         if resume:
-#             return timestamp_folders[0]  # Return the latest timestamped folder if resume is True
-#         else:
-#             # Create new folder with current timestamp
-#             now = datetime.now().strftime("%Y%m%d_%H%M%S")
-#             new_timestamp_folder = output_dir / now
-#     else:
-#         # Create first timestamped folder if none exists
-#         now = datetime.now().strftime("%Y%m%d_%H%M%S")
-#         new_timestamp_folder = output_dir / now
-    
-#     new_timestamp_folder.mkdir()
-#     return new_timestamp_folder
+# Get next version =============================================================
+def get_next_version(output_dir):
+    existing_versions = [int(d.name.split("_")[-1]) for d in output_dir.glob("version_*")]
+    if len(existing_versions) == 0:
+        return 0
+    return max(existing_versions) + 1
 
 
 # Main =========================================================================
 if __name__ == "__main__":
 # Load config ==================================================================
-    with open("configs/default.yaml") as file:
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--config', type=str, default='configs/default.yaml')
+    args = parser.parse_args()
+    with open(args.config) as file:
         cfg = yaml.safe_load(file)
         data = cfg['data']
         params = cfg['params']
 
+# Set device ====================================================================
+    os.environ['CUDA_VISIBLE_DEVICES'] = params['devices']
+    device = torch.device(params['accelerator'])
+
 # Create output directory ======================================================
-        if params['resume_from'] is not None:
-            output_dir = Path(params['output_dir_resume_from'])
-        else:
-            # output_dir = create_timestamped_folder(params['output_dir'], resume=params['resume'])
-            output_dir = Path(params['output_dir'])
-        output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir = Path(params['output_dir'])
+    log_root = output_dir / "logs"
+    log_root.mkdir(parents=True, exist_ok=True)
+    version = get_next_version(log_root)
+    log_dir = log_root / f"version_{version}"
+    log_dir.mkdir(parents=True, exist_ok=True)
 
 # Save config ==================================================================
-    with open(output_dir / "config.yaml", "w") as file:
+    with open(log_dir / "hparams.yaml", "w") as file:
         yaml.dump(cfg, file)
 
-    os.environ['CUDA_VISIBLE_DEVICES'] = params['gpus']
-
 # Tensorboard ==================================================================
-    log_dir = output_dir / "logs"
-    log_dir.mkdir(parents=True, exist_ok=True)
     writer = SummaryWriter(log_dir)
 
 # Logging ======================================================================
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
-    logger.addHandler(logging.FileHandler(output_dir / "log.log"))
+    logger.addHandler(logging.FileHandler(log_dir / "log.log"))
 
 # Seed =========================================================================
     L.seed_everything(params['seed'])
     torch.set_float32_matmul_precision(params['float32_matmul_precision'])
 
-# Model, Optimizer, Loss, Dataset, DataLoader ==================================
-    device = torch.device(params['device'])
-
+# Model ========================================================================
     net_G = define_G(cfg)
     net_D = define_D(cfg)
-    net_G = torch.nn.DataParallel(net_G).to(device)
-    net_D = torch.nn.DataParallel(net_D).to(device)
+    if torch.cuda.device_count() > 1:
+        net_G = torch.nn.DataParallel(net_G)
+        net_D = torch.nn.DataParallel(net_D)
+    net_G = net_G.to(device)
+    net_D = net_D.to(device)
 
+# Optimizer ====================================================================
     if params['optimizer']['name'] == "Adam":
         args = params['optimizer']['args']
         optim_G = optim.Adam(net_G.parameters(), lr=args['lr'], betas=args['betas'])
@@ -95,6 +80,7 @@ if __name__ == "__main__":
     else:
         raise NotImplementedError("Optimizer not implemented")
 
+# Loss =========================================================================
     if params['loss']['generator']['name'] == 'L1Loss':
         criterion_G = torch.nn.L1Loss()
         lambda_factor = params['loss']['generator']['lambda']
@@ -106,6 +92,7 @@ if __name__ == "__main__":
     else:
         raise NotImplementedError("Loss (D) not implemented")
     
+# Dataset, DataLoader ==========================================================
     train_dataset = AlignedDataset(
         data['train']['input_dir'], 
         data['train']['target_dir'],
@@ -135,9 +122,14 @@ if __name__ == "__main__":
     )
 
 # Setup Training ===============================================================
-    output_image_train_dir = output_dir / "images/train"
-    output_image_val_dir = output_dir / "images/val"
-    output_model_dir = output_dir / "models"
+    output_image_dir = output_dir / "images" / f"version_{version}"
+    output_image_train_dir = output_image_dir / "train"
+    output_image_val_dir = output_image_dir / "val"
+    output_image_train_dir.mkdir(parents=True, exist_ok=True)
+    output_image_val_dir.mkdir(parents=True, exist_ok=True)
+
+    output_model_dir = log_dir / "checkpoints"
+    output_model_dir.mkdir(parents=True, exist_ok=True)
 
     if params['resume_from'] is not None:
         checkpoint = torch.load(params['resume_from'])
@@ -153,26 +145,9 @@ if __name__ == "__main__":
         optim_D.load_state_dict(checkpoint['optim_D'])
         print(f"Resuming from checkpoint: {params['resume_from']}")
 
-    elif params['resume'] and (output_model_dir/"latest_checkpoint.pth").exists():
-        checkpoint = torch.load(output_model_dir/"latest_checkpoint.pth")
-        start_epoch = checkpoint['epoch'] + 1
-        start_iteration = checkpoint['iteration']
-        if start_epoch > params['num_epochs']:
-            raise ValueError(f"Resuming epoch {start_epoch} is greater than num_epochs {params['num_epochs']}")
-        net_G.load_state_dict(checkpoint["net_G"])
-        net_D.load_state_dict(checkpoint["net_D"])
-        net_G = net_G.to(device)
-        net_D = net_D.to(device)
-        optim_G.load_state_dict(checkpoint['optim_G'])
-        optim_D.load_state_dict(checkpoint['optim_D'])
-        print(f"Resuming from latest checkpoint: {output_model_dir/'latest_checkpoint.pth'}")
-        
     else:
-        start_epoch = 1
+        start_epoch = 0
         start_iteration = 0
-        output_image_train_dir.mkdir(parents=True, exist_ok=True)
-        output_image_val_dir.mkdir(parents=True, exist_ok=True)
-        output_model_dir.mkdir(parents=True, exist_ok=True)
         print("Starting from scratch")
 
 # Start Training ===============================================================
@@ -180,11 +155,11 @@ if __name__ == "__main__":
     start_time = perf_counter()
 
     iteration = start_iteration
-    for epoch in range(start_epoch, params['num_epochs']+1):
+    for epoch in range(start_epoch, params['num_epochs']):
         D_losses = []
         G_losses = []
         train_loop = tqdm(train_loader, leave=True)
-        train_loop.set_description(f"Epoch {epoch}/{params['num_epochs']}")
+        train_loop.set_description(f"Epoch {epoch}")
         for i, (inputs, real_target) in enumerate(train_loop):
             # print(i)
             # print(inputs.shape)
@@ -216,9 +191,6 @@ if __name__ == "__main__":
             G_loss.backward()
             optim_G.step()
 
-# Update Iteration =============================================================
-            iteration += 1
-
 # Log Losses ===================================================================
             D_losses.append(D_loss.item())
             G_losses.append(G_loss.item())
@@ -228,8 +200,11 @@ if __name__ == "__main__":
                     D_loss = D_loss.item(),
                     G_loss = G_loss.item(),
                 )
-                writer.add_scalar("D_loss", D_loss.item(), iteration)
-                writer.add_scalar("G_loss", G_loss.item(), iteration)
+                writer.add_scalar("D_loss_step", D_loss.item(), iteration)
+                writer.add_scalar("G_loss_step", G_loss.item(), iteration)
+
+# Update Iteration =============================================================
+            iteration += 1
                 
 # Save latest checkpoint ======================================================
         state = {
@@ -241,17 +216,18 @@ if __name__ == "__main__":
                 'iteration': iteration,
                 'hparams': cfg
         }
-        torch.save(state, output_model_dir/"latest_checkpoint.pth")
+        torch.save(state, output_model_dir/"last.ckpt")
 
 # Log to file ==================================================================
         D_loss_avg = sum(D_losses) / len(D_losses)
         G_loss_avg = sum(G_losses) / len(G_losses)
-        logger.info(f"Epoch {epoch}/{params['num_epochs']}: D_loss={D_loss_avg}, G_loss={G_loss_avg}")
+        writer.add_scalar("D_loss_epoch", D_loss_avg, iteration)
+        writer.add_scalar("G_loss_epoch", G_loss_avg, iteration)
+        logger.info(f"Epoch {epoch}: D_loss={D_loss_avg}, G_loss={G_loss_avg}")
         
 # Save images ==================================================================
-        if epoch % params['save_img_per_epoch'] == 0 or epoch == 1:
+        if epoch % params['save_img_per_epoch'] == 0 or epoch == params['num_epochs'] - 1:
             net_G.eval()
-            net_D.eval()
             with torch.no_grad():
                 train_dataset.save_image(fake_target[0], output_image_train_dir/f"{epoch}_{iteration}_fake.png")
                 train_dataset.save_image(real_target[0], output_image_train_dir/f"{epoch}_{iteration}_real.png")
@@ -266,13 +242,14 @@ if __name__ == "__main__":
                 val_fig = val_dataset.create_figure(inputs[0], real_target[0], fake_target[0])
                 writer.add_figure("val", val_fig, iteration)
             net_G.train()
-            net_D.train()
 
 # Save model ===================================================================
-        if epoch % params['save_state_per_epoch'] == 0 or epoch == 1:
+        if epoch % params['save_state_per_epoch'] == 0 or epoch == params['num_epochs'] - 1:
             torch.save(state, output_model_dir/f"{epoch}_{iteration}_checkpoint.pth")
-            torch.save(net_G.state_dict(), output_model_dir/f"{epoch}_{iteration}_G.pth")
-            # torch.save(net_D.state_dict(), output_model_dir/f"{epoch}_{iteration}_D.pth")
+            try:
+                torch.save(net_G.module.state_dict(), output_model_dir/f"{epoch}_{iteration}_G.pth")
+            except:
+                torch.save(net_G.state_dict(), output_model_dir/f"{epoch}_{iteration}_G.pth")
 
 # End Training ================================================================
     end_time = perf_counter()

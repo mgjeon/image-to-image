@@ -33,13 +33,6 @@ model:
     args:
       in_channels: 6
       features: [64, 128, 256, 512]
-lightning:
-  seed: 42
-  float32_matmul_precision: "high"
-  accelerator: "cuda"
-  devices: [2,3]
-  precision: "32-true"
-  strategy: "ddp_find_unused_parameters_true"
 params:
   optimizer:
     name: Adam
@@ -52,8 +45,16 @@ params:
       lambda: 100
     discriminator:
       name: BCEWithLogitsLoss
-  num_epochs: 10
+  num_epochs: 100
+  log_per_iteration: 10
   save_img_per_epoch: 1
-  save_state_per_epoch: 5
-  output_dir: ./checkpoints/default_lightning
+  save_state_per_epoch: 50
+  save_top_k: -1
+  seed: 42
+  float32_matmul_precision: "high"
+  accelerator: "cuda"
+  devices: [0]
+  precision: "32-true"
+  strategy: "auto"
+  output_dir: ./results/default_lightning
   resume_from: null

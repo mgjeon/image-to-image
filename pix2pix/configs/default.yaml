@@ -5,7 +5,7 @@ data:
     target_dir: ../datasets/facades/train/B
     batch_size: 4
     shuffle: true
-    num_workers: 0
+    num_workers: 4
     pin_memory: true
     drop_last: true
   val:
@@ -20,7 +20,10 @@ data:
     input_dir: ../datasets/facades/test/A
     target_dir: ../datasets/facades/test/B
     batch_size: 1
+    shuffle: false
     num_workers: 0
+    pin_memory: true
+    drop_last: false
 model:
   generator:
     name: simple_G
@@ -34,10 +37,6 @@ model:
       in_channels: 6
       features: [64, 128, 256, 512]
 params:
-  seed: 42
-  float32_matmul_precision: "high"
-  device: "cuda"
-  gpus: 2,3
   optimizer:
     name: Adam
     args:
@@ -49,11 +48,13 @@ params:
       lambda: 100
     discriminator:
       name: BCEWithLogitsLoss
-  num_epochs: 10
-  log_per_iteration: 100
+  num_epochs: 100
+  log_per_iteration: 10
   save_img_per_epoch: 1
-  save_state_per_epoch: 1
-  output_dir: ./checkpoints/default
-  resume: true
+  save_state_per_epoch: 50
+  seed: 42
+  float32_matmul_precision: "high"
+  accelerator: "cuda"
+  devices: '0'
+  output_dir: ./results/default
   resume_from: null
-  output_dir_resume_from: null
