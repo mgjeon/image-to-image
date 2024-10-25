@@ -50,13 +50,13 @@ class AlignedDataset(Dataset):
             input_image = transformed["image"]
             target_image = transformed["image_target"]
 
-        elif self.ext in ["npz"]:
+        elif self.ext in ["npy"]:
             # [-1, 1]
             # [C, H, W]
             # np.float32
             # [C, H, W] -> [H, W, C] for albumentations
-            input_image = np.load(input_file)["data"].astype(np.float32).transpose(1, 2, 0) 
-            target_image = np.load(target_file)["data"].astype(np.float32).transpose(1, 2, 0) 
+            input_image = np.load(input_file).astype(np.float32).transpose(1, 2, 0) 
+            target_image = np.load(target_file).astype(np.float32).transpose(1, 2, 0) 
 
             transformed = self.transform(image=input_image, image_target=target_image)
             # [C, H, W] torch.float32
@@ -91,7 +91,7 @@ class AlignedDataset(Dataset):
             self.MinVal = MinVal
             self.m = m
             self.s = s
-        elif self.ext in ["npz"]:
+        elif self.ext in ["npy"]:
             self.transform = A.Compose([
                 A.Resize(self.image_size, self.image_size),
                 # A.VerticalFlip(p=0.5),
@@ -116,7 +116,7 @@ class AlignedDataset(Dataset):
             x = np.clip(x, MinVal, MaxVal)
             x = x.astype(np.uint8)  # [0, 255]
             return x
-        elif self.ext in ["npz"]:
+        elif self.ext in ["npy"]:
             MinVal = 0
             MaxVal = 255
             m = (MinVal + MaxVal) / 2
@@ -138,7 +138,7 @@ class AlignedDataset(Dataset):
         x = np.transpose(x, (1, 2, 0)) # [C, H, W] -> [H, W, C]
         if self.ext in ["jpg", "jpeg", "png"]:
             Image.fromarray(x).save(filename)
-        elif self.ext in ["npz"]:
+        elif self.ext in ["npy"]:
             if x.shape[2] == 1:
                 x = np.squeeze(x, axis=2)
             Image.fromarray(x).save(filename)
@@ -177,7 +177,7 @@ class AlignedDataset(Dataset):
             fig.tight_layout()
             return fig
         
-        elif self.ext in ["npz"]:
+        elif self.ext in ["npy"]:
             in_channels = real_input.shape[0]
             out_channels_real = real_target.shape[0]
             out_channels_fake = fake_target.shape[0]

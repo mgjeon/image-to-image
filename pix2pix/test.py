@@ -20,103 +20,105 @@ from pipeline import AlignedDataset
 
 # Metrics ========================================================================
 def calculate_metrics(model, loader, device, log_dir, binning=4, stage="Validation"):
-    mae = MeanAbsoluteError().to(device)                  # 0.0 is best
-    psnr = PeakSignalNoiseRatio().to(device)              # +inf is best
-    ssim = StructuralSimilarityIndexMeasure().to(device)  # 1.0 is best
-    pearson = PearsonCorrCoef().to(device)                # 1.0 is best
-    
-    maes = []
-    psnrs = []
-    ssims = []
-    pearsons = []
-
-    avgpool2d = torch.nn.AvgPool2d(binning)
-    maes_binning = []
-    psnrs_binning = []
-    ssims_binning = []
-    pearsons_binning = []
-
-    for i, (inputs, real_target) in enumerate(tqdm(loader, desc=stage)):
-        inputs = inputs.to(device)
-        real_target = real_target.to(device)
-        fake_target = model(inputs)
-        if i == 0:
-            fig = val_dataset.create_figure(inputs[0], real_target[0], fake_target[0])
-            fig.savefig(log_dir / f"{stage}_example.png")
-            print(inputs.shape)
-            print(real_target.shape)
-            print(fake_target.shape)
+    model.eval()
+    with torch.no_grad():
+        mae = MeanAbsoluteError().to(device)                  # 0.0 is best
+        psnr = PeakSignalNoiseRatio().to(device)              # +inf is best
+        ssim = StructuralSimilarityIndexMeasure().to(device)  # 1.0 is best
+        pearson = PearsonCorrCoef().to(device)                # 1.0 is best
         
-        mae_value = mae(fake_target, real_target)
-        pixel_to_pixel_cc = pearson(fake_target.flatten(), real_target.flatten())
-        psnr_value = psnr(fake_target, real_target)
-        ssim_value = ssim(fake_target, real_target)
+        maes = []
+        psnrs = []
+        ssims = []
+        pearsons = []
 
-        maes.append(mae_value.item())
-        psnrs.append(psnr_value.item())
-        ssims.append(ssim_value.item())
-        pearsons.append(pixel_to_pixel_cc.item())
+        avgpool2d = torch.nn.AvgPool2d(binning)
+        maes_binning = []
+        psnrs_binning = []
+        ssims_binning = []
+        pearsons_binning = []
 
-        mae.reset()
-        pearson.reset()
-        psnr.reset()
-        ssim.reset()
-        
-        inputs_binning = avgpool2d(inputs)
-        real_target_binning = avgpool2d(real_target)
-        fake_target_binning = avgpool2d(fake_target)
-        if i == 0:
-            fig = val_dataset.create_figure(inputs[0], real_target_binning[0], fake_target_binning[0])
-            fig.savefig(log_dir / f"{stage}_example_binning.png")
-            print(inputs_binning.shape)
-            print(real_target_binning.shape)
-            print(fake_target_binning.shape)
+        for i, (inputs, real_target) in enumerate(tqdm(loader, desc=stage)):
+            inputs = inputs.to(device)
+            real_target = real_target.to(device)
+            fake_target = model(inputs)
+            if i == 0:
+                fig = val_dataset.create_figure(inputs[0], real_target[0], fake_target[0])
+                fig.savefig(log_dir / f"{stage}_example.png")
+                print(inputs.shape)
+                print(real_target.shape)
+                print(fake_target.shape)
             
-        mae_value_binning = mae(fake_target_binning, real_target_binning)
-        pixel_to_pixel_cc_binning = pearson(fake_target_binning.flatten(), real_target_binning.flatten())
-        psnr_value_binning = psnr(fake_target_binning, real_target_binning)
-        ssim_value_binning = ssim(fake_target_binning, real_target_binning)
+            mae_value = mae(fake_target, real_target)
+            pixel_to_pixel_cc = pearson(fake_target.flatten(), real_target.flatten())
+            psnr_value = psnr(fake_target, real_target)
+            ssim_value = ssim(fake_target, real_target)
 
-        maes_binning.append(mae_value_binning.item())
-        psnrs_binning.append(psnr_value_binning.item())
-        ssims_binning.append(ssim_value_binning.item())
-        pearsons_binning.append(pixel_to_pixel_cc_binning.item())
-        
-        mae.reset()
-        psnr.reset()
-        ssim.reset()
-        pearson.reset()
+            maes.append(mae_value.item())
+            psnrs.append(psnr_value.item())
+            ssims.append(ssim_value.item())
+            pearsons.append(pixel_to_pixel_cc.item())
 
-        del inputs
-        del real_target
-        del fake_target
-        del inputs_binning
-        del real_target_binning
-        del fake_target_binning
+            mae.reset()
+            pearson.reset()
+            psnr.reset()
+            ssim.reset()
+            
+            inputs_binning = avgpool2d(inputs)
+            real_target_binning = avgpool2d(real_target)
+            fake_target_binning = avgpool2d(fake_target)
+            if i == 0:
+                fig = val_dataset.create_figure(inputs[0], real_target_binning[0], fake_target_binning[0])
+                fig.savefig(log_dir / f"{stage}_example_binning.png")
+                print(inputs_binning.shape)
+                print(real_target_binning.shape)
+                print(fake_target_binning.shape)
+                
+            mae_value_binning = mae(fake_target_binning, real_target_binning)
+            pixel_to_pixel_cc_binning = pearson(fake_target_binning.flatten(), real_target_binning.flatten())
+            psnr_value_binning = psnr(fake_target_binning, real_target_binning)
+            ssim_value_binning = ssim(fake_target_binning, real_target_binning)
 
-        gc.collect()
-        torch.cuda.empty_cache()
+            maes_binning.append(mae_value_binning.item())
+            psnrs_binning.append(psnr_value_binning.item())
+            ssims_binning.append(ssim_value_binning.item())
+            pearsons_binning.append(pixel_to_pixel_cc_binning.item())
+            
+            mae.reset()
+            psnr.reset()
+            ssim.reset()
+            pearson.reset()
 
-    mae = sum(maes) / len(maes)
-    psnr = sum(psnrs) / len(psnrs)
-    ssim = sum(ssims) / len(ssims)
-    pearson = sum(pearsons) / len(pearsons)
+            del inputs
+            del real_target
+            del fake_target
+            del inputs_binning
+            del real_target_binning
+            del fake_target_binning
 
-    mae_binning = sum(maes_binning) / len(maes_binning)
-    psnr_binning = sum(psnrs_binning) / len(psnrs_binning)
-    ssim_binning = sum(ssims_binning) / len(ssims_binning)
-    pearson_binning = sum(pearsons_binning) / len(pearsons_binning)
+            gc.collect()
+            torch.cuda.empty_cache()
 
-    return {
-        "MAE": mae,
-        "PSNR": psnr,
-        "SSIM": ssim,
-        "Pearson": pearson,
-        "MAE_binning": mae_binning,
-        "PSNR_binning": psnr_binning,
-        "SSIM_binning": ssim_binning,
-        "Pearson_binning": pearson_binning
-    }
+        mae = sum(maes) / len(maes)
+        psnr = sum(psnrs) / len(psnrs)
+        ssim = sum(ssims) / len(ssims)
+        pearson = sum(pearsons) / len(pearsons)
+
+        mae_binning = sum(maes_binning) / len(maes_binning)
+        psnr_binning = sum(psnrs_binning) / len(psnrs_binning)
+        ssim_binning = sum(ssims_binning) / len(ssims_binning)
+        pearson_binning = sum(pearsons_binning) / len(pearsons_binning)
+
+        return {
+            "MAE": mae,
+            "PSNR": psnr,
+            "SSIM": ssim,
+            "Pearson": pearson,
+            "MAE_binning": mae_binning,
+            "PSNR_binning": psnr_binning,
+            "SSIM_binning": ssim_binning,
+            "Pearson_binning": pearson_binning
+        }
 
 
 # Main ===========================================================================
