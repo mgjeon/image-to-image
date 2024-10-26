@@ -53,11 +53,13 @@ params:
       lr: 0.0002
       betas: [0.5, 0.999]
   loss:
-    generator:
-      name: L1Loss
-      lambda: 100
-    discriminator:
+    adversarial:
       name: BCEWithLogitsLoss
+      args: null
+    reconstruction:
+      name: L1Loss
+      args:
+        lambdaL1: 100
   num_epochs: 50
   log_per_iteration: 10
   save_img_per_epoch: 1
@@ -69,5 +71,5 @@ params:
   devices: [0]
   precision: "32-true"
   strategy: "auto"
-  output_dir: ./results/sdo/default_lightning
+  output_dir: ./results/sdo/unet_patchgan
   resume_from: null
