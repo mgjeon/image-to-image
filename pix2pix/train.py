@@ -30,13 +30,16 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', type=str, required=True)
     parser.add_argument('--resume_from', type=str, default=None)
+    parser.add_argument('--num_epochs', type=int, default=None)
     args = parser.parse_args()
     with open(args.config) as file:
         cfg = yaml.safe_load(file)
         data = cfg['data']
         params = cfg['params']
         if args.resume_from is not None:
-            params['resume_from'] = args.resume_from
+            cfg['params']['resume_from'] = args.resume_from
+        if args.num_epochs is not None:
+            cfg['params']['num_epochs'] = args.num_epochs
 
 # Set device ====================================================================
     assert isinstance(params['devices'], list)
@@ -122,9 +125,13 @@ if __name__ == "__main__":
         yaml.dump(cfg, file)
 
 # Setup Training ===============================================================
-    output_image_dir = output_dir / "images" / f"version_{version}"
-    output_image_train_dir = output_image_dir / "train"
-    output_image_val_dir = output_image_dir / "val"
+    # output_image_dir = output_dir / "images" / f"version_{version}"
+    # output_image_train_dir = output_image_dir / "train"
+    # output_image_val_dir = output_image_dir / "val"
+    # output_image_train_dir.mkdir(parents=True, exist_ok=True)
+    # output_image_val_dir.mkdir(parents=True, exist_ok=True)
+    output_image_train_dir = log_dir / "images" / "train"
+    output_image_val_dir = log_dir / "images" / "val"
     output_image_train_dir.mkdir(parents=True, exist_ok=True)
     output_image_val_dir.mkdir(parents=True, exist_ok=True)
 
@@ -134,7 +141,7 @@ if __name__ == "__main__":
     if params['resume_from'] is not None:
         checkpoint = torch.load(params['resume_from'])
         start_epoch = checkpoint['epoch'] + 1
-        start_iteration = checkpoint['iteration']
+        start_iteration = checkpoint['iteration'] + 1
         if start_epoch > params['num_epochs']:
             raise ValueError(f"Resuming epoch {start_epoch} is greater than num_epochs {params['num_epochs']}")
         net_G.load_state_dict(checkpoint["net_G"])
@@ -151,9 +158,11 @@ if __name__ == "__main__":
         print("Starting from scratch")
 
 # Start Training ===============================================================
-    logger.info(f"Output directory: {output_dir.resolve()}")
+    # logger.info(f"Output directory: {output_dir.resolve()}")
     start_time = perf_counter()
 
+    iter_per_epoch = len(train_loader)
+   
     iteration = start_iteration
     for epoch in range(start_epoch, params['num_epochs']):
         D_losses = []
@@ -170,7 +179,7 @@ if __name__ == "__main__":
             inputs = inputs.to(device)
             real_targets = real_targets.to(device)
 
-            loss_G, loss_D, fake_targets = criterion(net_G, net_D, inputs, real_targets)
+            loss_G, loss_D = criterion(net_G, net_D, inputs, real_targets)
 
 # Train Generator ============================================================== 
             optim_G.zero_grad()
@@ -186,13 +195,21 @@ if __name__ == "__main__":
             D_losses.append(loss_D.item())
             G_losses.append(loss_G.item())
 
-            if iteration % params['log_per_iteration'] == 0:
-                train_loop.set_postfix(
-                    D_loss = loss_D.item(),
-                    G_loss = loss_G.item(),
-                )
+            if params['log_per_iteration'] == 1:
+                log_condition = True
+                epoch_log_condition = True
+            else:
+                log_condition = (iteration > 0) and ((iteration+1) % params['log_per_iteration'] == 0)
+                epoch_log_condition = (iteration > 0) and (((iteration+1) % params['log_per_iteration'] == 0) or ((iteration+1) % iter_per_epoch == 0))
+            if log_condition:
+                # train_loop.set_postfix(
+                #     D_loss = loss_D.item(),
+                #     G_loss = loss_G.item(),
+                # )
                 writer.add_scalar("D_loss_step", loss_D.item(), iteration)
                 writer.add_scalar("G_loss_step", loss_G.item(), iteration)
+            if epoch_log_condition:
+                writer.add_scalar("epoch", epoch, iteration)
 
 # Update Iteration ============================================================
             iteration += 1
@@ -204,7 +221,7 @@ if __name__ == "__main__":
                 'optim_G': optim_G.state_dict(),
                 'optim_D': optim_D.state_dict(),
                 'epoch': epoch,
-                'iteration': iteration,
+                'iteration': iteration-1,
                 'hparams': cfg
         }
         torch.save(state, output_model_dir/"last.ckpt")
@@ -212,36 +229,41 @@ if __name__ == "__main__":
 # Log to tensorboard, file ====================================================
         D_loss_avg = sum(D_losses) / len(D_losses)
         G_loss_avg = sum(G_losses) / len(G_losses)
-        writer.add_scalar("D_loss_epoch", D_loss_avg, iteration)
-        writer.add_scalar("G_loss_epoch", G_loss_avg, iteration)
-        logger.info(f"Epoch {epoch}: D_loss={D_loss_avg}, G_loss={G_loss_avg}")
+        writer.add_scalar("D_loss_epoch", D_loss_avg, iteration-1)
+        writer.add_scalar("G_loss_epoch", G_loss_avg, iteration-1)
+        # logger.info(f"Epoch {epoch}: D_loss={D_loss_avg}, G_loss={G_loss_avg}")
         
 # Save images ==================================================================
         if epoch % params['save_img_per_epoch'] == 0 or epoch == params['num_epochs'] - 1:
             net_G.eval()
             with torch.no_grad():
-                train_dataset.save_image(fake_targets[0], output_image_train_dir/f"{epoch}_{iteration}_fake.png")
-                train_dataset.save_image(real_targets[0], output_image_train_dir/f"{epoch}_{iteration}_real.png")
-                train_fig = train_dataset.create_figure(inputs[0], real_targets[0], fake_targets[0])
-                writer.add_figure("train", train_fig, iteration)
+                for inputs, real_targets in train_loader:
+                    inputs = inputs.to(device)
+                    fake_targets = net_G(inputs)
+                    train_dataset.save_image(fake_targets[0], output_image_train_dir/f"{epoch}_{iteration-1}_fake.png")
+                    train_dataset.save_image(real_targets[0], output_image_train_dir/f"{epoch}_{iteration-1}_real.png")
+                    train_fig = train_dataset.create_figure(inputs[0], real_targets[0], fake_targets[0])
+                    writer.add_figure("train", train_fig, iteration-1)
+                    break
                 for inputs, real_targets in val_loader:
                     inputs = inputs.to(device)
                     fake_targets = net_G(inputs)
-                    val_dataset.save_image(fake_targets[0], output_image_val_dir/f"{epoch}_{iteration}_fake.png")
-                    val_dataset.save_image(real_targets[0], output_image_val_dir/f"{epoch}_{iteration}_real.png")
+                    val_dataset.save_image(fake_targets[0], output_image_val_dir/f"{epoch}_{iteration-1}_fake.png")
+                    val_dataset.save_image(real_targets[0], output_image_val_dir/f"{epoch}_{iteration-1}_real.png")
                     break
                 val_fig = val_dataset.create_figure(inputs[0], real_targets[0], fake_targets[0])
-                writer.add_figure("val", val_fig, iteration)
+                writer.add_figure("val", val_fig, iteration-1)
             net_G.train()
 
 # Save model ===================================================================
         if epoch % params['save_state_per_epoch'] == 0 or epoch == params['num_epochs'] - 1:
-            torch.save(state, output_model_dir/f"{epoch}_{iteration}_checkpoint.pth")
+            torch.save(state, output_model_dir/f"{epoch}_{iteration-1}_checkpoint.pth")
             try:
-                torch.save(net_G.module.state_dict(), output_model_dir/f"{epoch}_{iteration}_G.pth")
+                torch.save(net_G.module.state_dict(), output_model_dir/f"{epoch}_{iteration-1}_G.pth")
             except:
-                torch.save(net_G.state_dict(), output_model_dir/f"{epoch}_{iteration}_G.pth")
+                torch.save(net_G.state_dict(), output_model_dir/f"{epoch}_{iteration-1}_G.pth")
 
 # End Training ================================================================
     end_time = perf_counter()
-    logger.info(f"Training took {end_time-start_time} seconds")
+    logger.info(f"Training time: {end_time-start_time} seconds")
+    logger.info("PyTorch")

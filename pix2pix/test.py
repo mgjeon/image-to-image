@@ -1,3 +1,4 @@
+import os
 import gc
 import argparse
 import logging
@@ -125,9 +126,12 @@ def calculate_metrics(model, loader, device, log_dir, binning=4, stage="Validati
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, required=True)
-    parser.add_argument("--checkpoint", type=str, required=True)
+    parser.add_argument("--model", type=str, required=True)
+    parser.add_argument("--device", type=str, default="0")
     args = parser.parse_args()
 
+    print(f"Using devices: {args.device}")
+    os.environ["CUDA_VISIBLE_DEVICES"] = args.device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     with open(args.config) as file:
@@ -138,8 +142,8 @@ if __name__ == "__main__":
         params = cfg['params']
 
     G = define_G(cfg)
-    checkpoint = torch.load(args.checkpoint, map_location=device, weights_only=True)
-    G.load_state_dict(checkpoint)
+    model_pth = torch.load(args.model, map_location=device, weights_only=True)
+    G.load_state_dict(model_pth)
     G = G.to(device)
 
     val_dataset = AlignedDataset(
@@ -172,7 +176,7 @@ if __name__ == "__main__":
         drop_last=data['test']['drop_last']
     )
 
-    log_dir = Path(args.checkpoint).parent.parent / "metrics"
+    log_dir = Path(args.model).parent.parent / "metrics"
     log_dir.mkdir(parents=True, exist_ok=True)
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)

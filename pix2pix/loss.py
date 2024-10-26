@@ -40,4 +40,4 @@ class Loss:
         loss_D_adv_fake = self.loss_adv(pred_fake, torch.zeros_like(pred_fake, device=pred_fake.device))
         loss_D = 0.5 * (loss_D_adv_real + loss_D_adv_fake)
 
-        return loss_G, loss_D, fake_targets
+        return loss_G, loss_D

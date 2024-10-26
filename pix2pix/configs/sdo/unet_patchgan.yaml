@@ -2,28 +2,28 @@ data:
   ext: npy
   image_size: 256
   train:
-    input_dir: /home/mgj/workspace/mgjeon/image-to-image/data/sdo/aia_dataset/train/input
-    target_dir: /home/mgj/workspace/mgjeon/image-to-image/data/sdo/aia_dataset/train/target
-    batch_size: 4
+    input_dir: /userhome/jeon_mg/workspace/aia_dataset_256/train/input
+    target_dir: /userhome/jeon_mg/workspace/aia_dataset_256/train/target
+    batch_size: 8
     shuffle: true
     num_workers: 4
     pin_memory: true
     drop_last: true
   val:
-    input_dir: /home/mgj/workspace/mgjeon/image-to-image/data/sdo/aia_dataset/val/input
-    target_dir: /home/mgj/workspace/mgjeon/image-to-image/data/sdo/aia_dataset/val/target
+    input_dir: /userhome/jeon_mg/workspace/aia_dataset_256/val/input
+    target_dir: /userhome/jeon_mg/workspace/aia_dataset_256/val/target
     batch_size: 1
     shuffle: false
     num_workers: 0
-    pin_memory: true
+    pin_memory: false
     drop_last: false
   test:
-    input_dir: /home/mgj/workspace/mgjeon/image-to-image/data/sdo/aia_dataset/test/input
-    target_dir: /home/mgj/workspace/mgjeon/image-to-image/data/sdo/aia_dataset/test/target
+    input_dir: /userhome/jeon_mg/workspace/aia_dataset_256/test/input
+    target_dir: /userhome/jeon_mg/workspace/aia_dataset_256/test/target
     batch_size: 1
     shuffle: false
     num_workers: 0
-    pin_memory: true
+    pin_memory: false
     drop_last: false
 model:
   generator:
@@ -60,16 +60,16 @@ params:
       name: L1Loss
       args:
         lambdaL1: 100
-  num_epochs: 50
-  log_per_iteration: 10
+  num_epochs: 3
+  log_per_iteration: 50
   save_img_per_epoch: 1
-  save_state_per_epoch: 50
+  save_state_per_epoch: 1
   save_top_k: -1
   seed: 42
   float32_matmul_precision: "high"
   accelerator: "cuda"
-  devices: [0]
+  devices: [2,3]
   precision: "32-true"
-  strategy: "auto"
+  strategy: "ddp"
   output_dir: ./results/sdo/unet_patchgan
   resume_from: null

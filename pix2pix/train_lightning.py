@@ -8,7 +8,7 @@ from torch import optim
 from torch.utils.data import DataLoader
 import lightning as L
 from lightning.pytorch.callbacks import ModelCheckpoint
-from lightning.pytorch.loggers import TensorBoardLogger, CSVLogger
+from lightning.pytorch.loggers import TensorBoardLogger
 
 from pipeline import AlignedDataset
 from networks import define_G, define_D
@@ -51,11 +51,11 @@ class Pix2Pix(L.LightningModule):
                 ext=self.cfg['data']['ext'],
             )
 
-        output_image_dir = self.output_dir / "images" / f"version_{self.loggers[0].version}"
-        self.output_image_train_dir = output_image_dir / "train"
-        self.output_image_val_dir = output_image_dir / "val"
-        self.output_image_train_dir.mkdir(parents=True, exist_ok=True)
-        self.output_image_val_dir.mkdir(parents=True, exist_ok=True)
+        # output_image_dir = self.output_dir / "images" / f"version_{self.loggers[0].version}"
+        # self.output_image_train_dir = output_image_dir / "train"
+        # self.output_image_val_dir = output_image_dir / "val"
+        # self.output_image_train_dir.mkdir(parents=True, exist_ok=True)
+        # self.output_image_val_dir.mkdir(parents=True, exist_ok=True)
 
 # DataLoader ======================================================================
     def train_dataloader(self):
@@ -95,7 +95,7 @@ class Pix2Pix(L.LightningModule):
 
         optim_G, optim_D = self.optimizers()
         
-        loss_G, loss_D, fake_targets = self.criterion(self.net_G, self.net_D, inputs, real_targets)
+        loss_G, loss_D = self.criterion(self.net_G, self.net_D, inputs, real_targets)
 
 # Train Generator =================================================================
         optim_G.zero_grad()
@@ -108,33 +108,37 @@ class Pix2Pix(L.LightningModule):
         optim_D.step()
 
 # Log Loss ========================================================================
-        self.log('G_loss_step', loss_G, on_step=True, on_epoch=False, prog_bar=False, logger=True, sync_dist=False)
-        self.log('D_loss_step', loss_D, on_step=True, on_epoch=False, prog_bar=False, logger=True, sync_dist=False)
-        self.log('G_loss_epoch', loss_G, on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
-        self.log('D_loss_epoch', loss_D, on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
+        self.log('G_loss_step', loss_G, on_step=True, on_epoch=False, prog_bar=False, logger=True)
+        self.log('D_loss_step', loss_D, on_step=True, on_epoch=False, prog_bar=False, logger=True)
+        self.log('G_loss_epoch', loss_G, on_step=False, on_epoch=True, prog_bar=False, logger=True, sync_dist=True)
+        self.log('D_loss_epoch', loss_D, on_step=False, on_epoch=True, prog_bar=False, logger=True, sync_dist=True)
 
     def on_train_epoch_end(self):
         global_step = self.global_step // 2  # self.global_step is the number of optimizer steps taken, in this case 2 steps per iteration because of the multi-optimizer training
 
 # Save Image ======================================================================
         if self.current_epoch % self.cfg['params']['save_img_per_epoch'] == 0:
+            output_image_train_dir = Path(self.loggers[0].log_dir)/"images"/"train"
+            output_image_val_dir = Path(self.loggers[0].log_dir)/"images"/"val"
+            if not output_image_train_dir.exists(): output_image_train_dir.mkdir(parents=True, exist_ok=True)
+            if not output_image_val_dir.exists(): output_image_val_dir.mkdir(parents=True, exist_ok=True)
             self.net_G.eval()
             with torch.no_grad():
                 for inputs, real_target in self.train_dataloader():
                     inputs = inputs.to(self.device)
                     fake_target = self.net_G(inputs)
-                    self.train_dataset.save_image(fake_target[0], self.output_image_train_dir/f"{self.current_epoch}_{global_step}_fake.png")
-                    self.train_dataset.save_image(real_target[0], self.output_image_train_dir/f"{self.current_epoch}_{global_step}_real.png")
+                    self.train_dataset.save_image(fake_target[0], output_image_train_dir/f"{self.current_epoch}_{global_step-1}_fake.png")
+                    self.train_dataset.save_image(real_target[0], output_image_train_dir/f"{self.current_epoch}_{global_step-1}_real.png")
                     train_fig = self.train_dataset.create_figure(inputs[0], real_target[0], fake_target[0])
-                    self.logger.experiment.add_figure('train', train_fig, global_step)
+                    self.logger.experiment.add_figure('train', train_fig, global_step-1)
                     break
                 for inputs, real_target in self.val_dataloader():
                     inputs = inputs.to(self.device)
                     fake_target = self.net_G(inputs)
-                    self.val_dataset.save_image(fake_target[0], self.output_image_val_dir/f"{self.current_epoch}_{global_step}_fake.png")
-                    self.val_dataset.save_image(real_target[0], self.output_image_val_dir/f"{self.current_epoch}_{global_step}_real.png")
+                    self.val_dataset.save_image(fake_target[0], output_image_val_dir/f"{self.current_epoch}_{global_step-1}_fake.png")
+                    self.val_dataset.save_image(real_target[0], output_image_val_dir/f"{self.current_epoch}_{global_step-1}_real.png")
                     val_fig = self.val_dataset.create_figure(inputs[0], real_target[0], fake_target[0])
-                    self.logger.experiment.add_figure('val', val_fig, global_step)
+                    self.logger.experiment.add_figure('val', val_fig, global_step-1)
                     break
             self.net_G.train()
 
@@ -142,7 +146,7 @@ class Pix2Pix(L.LightningModule):
         if self.current_epoch % self.cfg['params']['save_state_per_epoch'] == 0 or self.current_epoch == self.cfg['params']['num_epochs']-1:
             ckpt_path = Path(self.loggers[0].log_dir)/"checkpoints"
             if not ckpt_path.exists(): ckpt_path.mkdir(parents=True, exist_ok=True)
-            torch.save(self.net_G.state_dict(), ckpt_path/f"{self.current_epoch}_{global_step}_G.pth")
+            torch.save(self.net_G.state_dict(), ckpt_path/f"{self.current_epoch}_{global_step-1}_G.pth")
 
 
 # Main =========================================================================
@@ -150,9 +154,15 @@ if __name__ == "__main__":
 # Load config ==================================================================
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', type=str, required=True)
+    parser.add_argument('--resume_from', type=str, default=None)
+    parser.add_argument('--num_epochs', type=int, default=None)
     args = parser.parse_args()
     with open(args.config) as file:
         cfg = yaml.safe_load(file)  
+        if args.resume_from is not None:
+            cfg['params']['resume_from'] = args.resume_from
+        if args.num_epochs is not None:
+            cfg['params']['num_epochs'] = args.num_epochs
 
 # Seed =========================================================================
     L.seed_everything(cfg['params']['seed'])
@@ -174,22 +184,28 @@ if __name__ == "__main__":
         name='logs',
         default_hp_metric=False,
     )
-    csv_logger = CSVLogger(
-        save_dir=model.output_dir,
-        name='logs_csv',
-    )
 
 # Trainer =======================================================================
+    if "ddp" in cfg['params']['strategy']:
+        if len(cfg['params']['devices']) > 1:
+            strategy = "ddp_find_unused_parameters_true"
+            cfg['params']['strategy'] = strategy
+        else:
+            strategy = "auto"
+            cfg['params']['strategy'] = strategy
+    else:
+        strategy = cfg['params']['strategy']
+
     trainer = L.Trainer(
         default_root_dir=model.output_dir,
         callbacks=[checkpoint_callback],
-        logger=[tb_logger, csv_logger],
+        logger=[tb_logger],
         log_every_n_steps=cfg['params']['log_per_iteration'],
         max_epochs=cfg['params']['num_epochs'],
         accelerator=cfg['params']['accelerator'],
         devices=cfg['params']['devices'],
         precision=cfg['params']['precision'],
-        strategy=cfg['params']['strategy'],
+        strategy=strategy,
     )
 
 # Training ======================================================================
@@ -199,5 +215,6 @@ if __name__ == "__main__":
     else:
         trainer.fit(model)
     end_time = perf_counter()
-    with open(Path(trainer.log_dir) / 'time.log', 'w') as file:
+    with open(Path(trainer.log_dir) / 'log.log', 'w') as file:
         file.write(f"Training time: {end_time-start_time} seconds")
+        file.write("\nPyTorch Lightning")

@@ -1,7 +1,7 @@
 **/__pycache__/
 **/checkpoints/
 **/datasets/
-**/results/
+**/results*/
 **/sdo_raw/
 **/aia_dataset/
 **/aia_prep/
