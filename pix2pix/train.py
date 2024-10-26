@@ -53,10 +53,6 @@ if __name__ == "__main__":
     log_dir = log_root / f"version_{version}"
     log_dir.mkdir(parents=True, exist_ok=True)
 
-# Save config ==================================================================
-    with open(log_dir / "hparams.yaml", "w") as file:
-        yaml.dump(cfg, file)
-
 # Tensorboard ==================================================================
     writer = SummaryWriter(log_dir)
 
@@ -75,6 +71,7 @@ if __name__ == "__main__":
     if torch.cuda.device_count() > 1:
         net_G = torch.nn.DataParallel(net_G)
         net_D = torch.nn.DataParallel(net_D)
+        cfg['params']['strategy'] = "dp"
     net_G = net_G.to(device)
     net_D = net_D.to(device)
 
@@ -119,6 +116,10 @@ if __name__ == "__main__":
         pin_memory=data['val']['pin_memory'],
         drop_last=data['val']['drop_last']
     )
+
+# Save config ==================================================================
+    with open(log_dir / "hparams.yaml", "w") as file:
+        yaml.dump(cfg, file)
 
 # Setup Training ===============================================================
     output_image_dir = output_dir / "images" / f"version_{version}"

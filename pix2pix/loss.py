@@ -24,8 +24,8 @@ class Loss:
         fake_targets = G(inputs)
 
         # Generator loss
-        pred_fake = D(torch.cat((inputs, fake_targets), dim=1))
-        loss_G_adv = self.loss_adv(pred_fake, torch.ones_like(pred_fake))
+        pred_fake_pool = D(torch.cat((inputs, fake_targets), dim=1))
+        loss_G_adv = self.loss_adv(pred_fake_pool, torch.ones_like(pred_fake_pool, device=pred_fake_pool.device))
         if self.loss_rec_name == 'L1Loss':
             lambda_L1 = self.loss_rec_args['lambdaL1']
             loss_G_rec = lambda_L1 * self.loss_rec(real_targets, fake_targets)
@@ -35,9 +35,9 @@ class Loss:
 
         # Discriminator loss
         pred_real = D(torch.cat((inputs, real_targets), dim=1))
-        loss_D_adv_real = self.loss_adv(pred_real, torch.ones_like(pred_real))
+        loss_D_adv_real = self.loss_adv(pred_real, torch.ones_like(pred_real, device=pred_real.device))
         pred_fake = D(torch.cat((inputs, fake_targets.detach()), dim=1))
-        loss_D_adv_fake = self.loss_adv(pred_fake, torch.zeros_like(pred_fake))
+        loss_D_adv_fake = self.loss_adv(pred_fake, torch.zeros_like(pred_fake, device=pred_fake.device))
         loss_D = 0.5 * (loss_D_adv_real + loss_D_adv_fake)
 
         return loss_G, loss_D, fake_targets
