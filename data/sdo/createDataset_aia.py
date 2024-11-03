@@ -11,6 +11,7 @@ from pathlib import Path
 import numpy as np
 from sunpy.map import Map
 from tqdm import tqdm
+import albumentations as A
 
 from preprocess_aia import get_intersecting_files
 
@@ -22,6 +23,7 @@ def create_input_target(
     target_wavelengths=[193],
     months=[1],
     years=[2020, 2021, 2022, 2023],
+    image_size=None,
 ):
     root = Path(dataset_root) / kind
     input_root = root / 'input'
@@ -46,6 +48,12 @@ def create_input_target(
     input_wl = '_'.join(map(str, input_wavelengths))
     target_wl = '_'.join(map(str, target_wavelengths))
 
+    if image_size is not None:
+        transform = A.Compose([
+            A.Resize(image_size, image_size),
+        ])
+        print(f"Transforming images to size {image_size}x{image_size}")
+
     for con in tqdm(
         zip(*input_files), 
         total=len(input_files[0]),
@@ -55,10 +63,17 @@ def create_input_target(
         s_maps = [Map(file) for file in con]
         datas = [s_map.data for s_map in s_maps]
         # metas = [s_map.meta for s_map in s_maps]
-        # [C, H, W]
-        stacked = np.stack(datas, axis=0)
-        # np.savez(save_path, data=stacked, metas=metas)
-        np.save(save_path, stacked)
+        if image_size is None:
+            # [C, H, W]
+            stacked = np.stack(datas, axis=0)
+            np.save(save_path, stacked)
+        else:
+            # [H, W, C]
+            stacked = np.stack(datas, axis=-1)
+            transformed = transform(image=stacked)
+            # [C, H, W]
+            transformed = transformed["image"].transpose(2, 0, 1)
+            np.save(save_path, transformed)
 
     for con in tqdm(
         zip(*target_files), 
@@ -69,10 +84,17 @@ def create_input_target(
         s_maps = [Map(file) for file in con]
         datas = [s_map.data for s_map in s_maps]
         # metas = [s_map.meta for s_map in s_maps]
-        # [C, H, W]
-        stacked = np.stack(datas, axis=0)
-        # np.savez(save_path, data=stacked, metas=metas)
-        np.save(save_path, stacked)
+        if image_size is None:
+            # [C, H, W]
+            stacked = np.stack(datas, axis=0)
+            np.save(save_path, stacked)
+        else:
+            # [H, W, C]
+            stacked = np.stack(datas, axis=-1)
+            transformed = transform(image=stacked)
+            # [C, H, W]
+            transformed = transformed["image"].transpose(2, 0, 1)
+            np.save(save_path, transformed)
     
 
 if __name__ == "__main__":
@@ -93,6 +115,7 @@ if __name__ == "__main__":
         target_wavelengths=config['train']['target_wavelengths'],
         months=config['train']['months'],
         years=config['train']['years'],
+        image_size=config.get('image_size', None),
     )
 
     create_input_target(
@@ -103,6 +126,7 @@ if __name__ == "__main__":
         target_wavelengths=config['val']['target_wavelengths'],
         months=config['val']['months'],
         years=config['val']['years'],
+        image_size=config.get('image_size', None),
     )
 
     create_input_target(
@@ -113,4 +137,5 @@ if __name__ == "__main__":
         target_wavelengths=config['test']['target_wavelengths'],
         months=config['test']['months'],
         years=config['test']['years'],
+        image_size=config.get('image_size', None),
     )
