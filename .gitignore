@@ -3,7 +3,7 @@
 **/datasets/
 **/results*/
 **/sdo_raw/
-**/aia_dataset/
+**/aia_dataset*/
 **/aia_prep/
 **/*.png
 **/*.jpg

@@ -27,41 +27,41 @@ data:
     drop_last: false
 
 model:
-  generator:
-    name: unet
-    args:
-      input_nc: 2
-      output_nc: 1
-      num_downs: 8
-      ngf: 64
-      norm_layer: instance
-      use_dropout: false
-      init_type: normal
-      init_gain: 0.02
-  discriminator:
-    name: patchgan
-    args:
-      input_nc: 3
-      ndf: 64
-      n_layers: 3
-      norm_layer: instance
-      init_type: normal
-      init_gain: 0.02
+  name: ddim_unet
+  args:
+    input_nc: 2     # channel of input image (condition)
+    output_nc: 1    # channel of target image = channel of noise
+    ch: 128
+    ch_mult: [1, 1, 2, 2, 4, 4]
+    num_res_blocks: 2
+    attn_resolutions: [16, ]
+    dropout: 0.0
+    resamp_with_conv: True
 
 params:
+  model:
+    ema: True
+    ema_rate: 0.999
+  diffusion:  
+    beta_schedule: linear
+    beta_start: 0.0001
+    beta_end: 0.02
+    num_timesteps: 1000
+    fast_ddpm: False
+  sampling:
+    fixed_initial_noise: True
+    eta: 0.0
+    timesteps: 100         # skip = num_time_steps // timesteps
+    # beta_schedule_type: "uniform"                            Fast-DDPM
   optimizer:
     name: Adam
     args:
-      lr: 0.0002
-      betas: [0.5, 0.999]
+      lr: 0.00002
   loss:
-    adversarial:
-      name: BCEWithLogitsLoss
-      args: null
-    reconstruction:
-      name: L1Loss
-      args:
-        lambdaL1: 100
+    name: MSELoss
+    args:
+      reduction: sum
+      average_over_batch: true
   num_epochs: 50
   log_per_iteration: 50
   save_img_per_epoch: 1
@@ -73,5 +73,5 @@ params:
   devices: [0]
   precision: "32-true"
   strategy: "ddp"
-  output_dir: /home/mgj/workspace/mgjeon/image-to-image/results/sdo/pix2pix_unet_patchgan
+  output_dir: /home/mgj/workspace/mgjeon/image-to-image/results/sdo/diffusion_ddpm
   resume_from: null

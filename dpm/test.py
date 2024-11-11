@@ -15,8 +15,11 @@ from torchmetrics import MeanAbsoluteError
 from torchmetrics.regression import PearsonCorrCoef
 from torchmetrics.image import PeakSignalNoiseRatio, StructuralSimilarityIndexMeasure
 
-from networks import define_G
 from pipeline import AlignedDataset
+from networks import define_model
+from sampling import sample_image
+
+torch.random.manual_seed(0)
 
 # Get next version ===============================================================
 def get_next_version(output_dir):
@@ -27,7 +30,7 @@ def get_next_version(output_dir):
 
 
 # Metrics ========================================================================
-def calculate_metrics(model, loader, device, log_dir, args, stage="Validation"):
+def calculate_metrics(model, cfg, initial_noise, loader, device, log_dir, args, stage="Validation"):
     binning = args.binning
     subsample = args.subsample
     model.eval()
@@ -51,7 +54,14 @@ def calculate_metrics(model, loader, device, log_dir, args, stage="Validation"):
         for i, (inputs, real_target) in enumerate(tqdm(loader, desc=stage)):
             inputs = inputs.to(device)
             real_target = real_target.to(device)
-            fake_target = model(inputs)
+            fake_target = sample_image(
+                config=cfg,
+                model=model,
+                input_image=inputs,
+                initial_noise=initial_noise,
+                device=device,
+                create_list=False
+            )
             if i == 0:
                 fig = val_dataset.create_figure(inputs[0], real_target[0], fake_target[0])
                 fig.savefig(log_dir / f"{stage}_example.png")
@@ -83,6 +93,7 @@ def calculate_metrics(model, loader, device, log_dir, args, stage="Validation"):
                 print(inputs_binning.shape)
                 print(real_target_binning.shape)
                 print(fake_target_binning.shape)
+            
                 
             mae_value_binning = mae(fake_target_binning, real_target_binning)
             pixel_to_pixel_cc_binning = pearson(fake_target_binning.flatten(), real_target_binning.flatten())
@@ -142,6 +153,8 @@ if __name__ == "__main__":
     parser.add_argument("--device", type=str, default="0")
     parser.add_argument("--binning", type=int, default=4)
     parser.add_argument("--subsample", type=int, default=10)
+    parser.add_argument("--num_timesteps", type=int, default=1000)
+    parser.add_argument("--timesteps", type=int, default=10)
     args = parser.parse_args()
 
     print(f"Using devices: {args.device}")
@@ -155,10 +168,10 @@ if __name__ == "__main__":
         data = cfg['data']
         params = cfg['params']
 
-    G = define_G(cfg)
+    model = define_model(cfg)
     model_pth = torch.load(args.model, map_location=device, weights_only=True)
-    G.load_state_dict(model_pth)
-    G = G.to(device)
+    model.load_state_dict(model_pth)
+    model = model.to(device)
 
     val_dataset = AlignedDataset(
         input_dir=data['val']['input_dir'], 
@@ -190,7 +203,10 @@ if __name__ == "__main__":
         drop_last=data['test']['drop_last']
     )
 
-    log_dir = Path(args.model).parent.parent / "metrics"
+    log_root = Path(args.model).parent.parent / "metrics"
+    log_root.mkdir(parents=True, exist_ok=True)
+    version = get_next_version(log_root)
+    log_dir = log_root / f"version_{version}"
     log_dir.mkdir(parents=True, exist_ok=True)
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
@@ -199,7 +215,22 @@ if __name__ == "__main__":
     with open(log_dir / "config.yaml", "w") as file:
         yaml.dump(args, file)
 
-    val_metrics = calculate_metrics(G, val_loader, device, log_dir, args, stage="Validation")
+    initial_noise = torch.randn(
+            1,
+            cfg['model']['args']['output_nc'],
+            data['image_size'],
+            data['image_size'],
+            device=device
+    )
+    print("Using fixed initial noise")
+
+    cfg['params']['diffusion']['num_timesteps'] = args.num_timesteps
+    cfg['params']['sampling']['timesteps'] = args.timesteps
+
+    logger.info(f"Number of timesteps: {args.num_timesteps}")
+    logger.info(f"Total steps: {len(range(0, args.num_timesteps, args.num_timesteps//args.timesteps))}")
+
+    val_metrics = calculate_metrics(model, cfg, initial_noise, val_loader, device, log_dir, args, stage="Validation")
     with open(log_dir / "val_metrics.yaml", "w") as file:
         yaml.dump(val_metrics, file)
     logger.info(f"Validation MAE: {val_metrics['MAE']:.2f}")
@@ -211,7 +242,7 @@ if __name__ == "__main__":
     logger.info(f"Validation SSIM (binning): {val_metrics['SSIM_binning']:.2f}")
     logger.info(f"Validation Pixel-to-Pixel Pearson CC (binning): {val_metrics['Pearson_binning']:.2f}")
 
-    test_metrics = calculate_metrics(G, test_loader, device, log_dir, args, stage="Test")
+    test_metrics = calculate_metrics(model, cfg, initial_noise, test_loader, device, log_dir, args, stage="Test")
     with open(log_dir / "test_metrics.yaml", "w") as file:
         yaml.dump(test_metrics, file)
     logger.info(f"Test MAE: {test_metrics['MAE']:.2f}")

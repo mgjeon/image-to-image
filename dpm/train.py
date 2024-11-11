@@ -12,9 +12,11 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
 from pipeline import AlignedDataset
-from networks import define_G, define_D
+from networks import define_model
 from loss import Loss
-
+from noise_schedule import get_beta_schedule
+from sampling import sample_image
+from ema import EMAHelper
 
 # Get next version =============================================================
 def get_next_version(output_dir):
@@ -69,20 +71,16 @@ if __name__ == "__main__":
     torch.set_float32_matmul_precision(params['float32_matmul_precision'])
 
 # Model ========================================================================
-    net_G = define_G(cfg)
-    net_D = define_D(cfg)
+    model = define_model(cfg)
     if torch.cuda.device_count() > 1:
-        net_G = torch.nn.DataParallel(net_G)
-        net_D = torch.nn.DataParallel(net_D)
+        model = torch.nn.DataParallel(model)
         cfg['params']['strategy'] = "dp"
-    net_G = net_G.to(device)
-    net_D = net_D.to(device)
+    model = model.to(device)
 
 # Optimizer ====================================================================
     if params['optimizer']['name'] == "Adam":
         args = params['optimizer']['args']
-        optim_G = optim.Adam(net_G.parameters(), lr=args['lr'], betas=args['betas'])
-        optim_D = optim.Adam(net_D.parameters(), lr=args['lr'], betas=args['betas'])
+        optimizer = optim.Adam(model.parameters(), lr=args['lr'])
     else:
         raise NotImplementedError("Optimizer not implemented")
 
@@ -139,23 +137,57 @@ if __name__ == "__main__":
     output_model_dir.mkdir(parents=True, exist_ok=True)
 
     if params['resume_from'] is not None:
-        checkpoint = torch.load(params['resume_from'])
+        checkpoint = torch.load(params['resume_from'], map_location=device)
         start_epoch = checkpoint['epoch'] + 1
         start_iteration = checkpoint['iteration'] + 1
         if start_epoch > params['num_epochs']:
             raise ValueError(f"Resuming epoch {start_epoch} is greater than num_epochs {params['num_epochs']}")
-        net_G.load_state_dict(checkpoint["net_G"])
-        net_D.load_state_dict(checkpoint["net_D"])
-        net_G = net_G.to(device)
-        net_D = net_D.to(device)
-        optim_G.load_state_dict(checkpoint['optim_G'])
-        optim_D.load_state_dict(checkpoint['optim_D'])
+        model.load_state_dict(checkpoint["model"])
+        model = model.to(device)
+        optimizer.load_state_dict(checkpoint['optimizer'])
         print(f"Resuming from checkpoint: {params['resume_from']}")
 
     else:
         start_epoch = 0
         start_iteration = 0
         print("Starting from scratch")
+
+# Diffusion Beta Schedule ======================================================
+    num_timesteps = params['diffusion']['num_timesteps']
+    betas = get_beta_schedule(
+        beta_schedule=params['diffusion']['beta_schedule'],
+        beta_start=params['diffusion']['beta_start'],
+        beta_end=params['diffusion']['beta_end'],
+        num_diffusion_timesteps=num_timesteps
+    )
+    betas = torch.from_numpy(betas).float().to(device)
+    alphas = (1-betas).cumprod(dim=0)
+
+# Model EMA ====================================================================
+    if params['model']['ema']:
+        ema_helper = EMAHelper(mu=params['model']['ema_rate'])
+        ema_helper.register(model)
+    else:
+        ema_helper = None
+
+# Fixed Initial Noise ==========================================================
+    if params['sampling']['fixed_initial_noise']:
+        initial_noise = torch.randn(
+            1,
+            cfg['model']['args']['output_nc'],
+            data['image_size'],
+            data['image_size'],
+            device=device
+        )
+        print("Using fixed initial noise")
+    else:
+        initial_noise = None
+
+# Fast DDPM ====================================================================
+    fast_ddpm = params['diffusion']['fast_ddpm']
+    if fast_ddpm:
+        skip = num_timesteps // params['sampling']['timesteps']
+        print(f"Using Fast-DDPM with skip {skip} over {num_timesteps} timesteps")
 
 # Start Training ===============================================================
     # logger.info(f"Output directory: {output_dir.resolve()}")
@@ -165,35 +197,68 @@ if __name__ == "__main__":
    
     iteration = start_iteration
     for epoch in range(start_epoch, params['num_epochs']):
-        D_losses = []
-        G_losses = []
+        losses = []
         train_loop = tqdm(train_loader, leave=True)
         train_loop.set_description(f"Epoch {epoch}")
         for batch_idx, (inputs, real_targets) in enumerate(train_loop):
+            model.train()
             # print(batch_idx)
             # print(inputs.shape)
             # print(real_target.shape)
             # import sys
             # sys.exit()
 
+# Input Image ==================================================================
+            # (n, ch_in, h, w)
             inputs = inputs.to(device)
+
+# Real Target Image ============================================================
+            # (n, ch_out, h, w)
             real_targets = real_targets.to(device)
 
-            loss_G, loss_D = criterion(net_G, net_D, inputs, real_targets)
+# Generate Noise ===============================================================
+            # (n, ch_out, h, w)
+            e = torch.randn_like(real_targets)
+            n = e.shape[0]
 
-# Train Generator ============================================================== 
-            optim_G.zero_grad()
-            loss_G.backward()
-            optim_G.step()
+# Antithetic Sampling for Diffusion Timesteps ==================================
+            # (n,)
+            if fast_ddpm:
+                skip = num_timesteps // params['sampling']['timesteps']
+                t_intervals = torch.arange(-1, num_timesteps, skip)
+                t_intervals[0] = 0
 
-# Train Discriminator ==========================================================
-            optim_D.zero_grad()
-            loss_D.backward()
-            optim_D.step()
+                idx_1 = torch.randint(low=0, high=len(t_intervals), size=(n//2 + 1,))
+                idx_2 = len(t_intervals)-idx_1-1
+                idx = torch.cat([idx_1, idx_2], dim=0)[:n]
+                t = t_intervals[idx].to(device)
+            else:
+                t = torch.randint(
+                    low=0, high=num_timesteps, size=(n//2 + 1,)
+                ).to(device)
+                t = torch.cat([t, num_timesteps - t - 1], dim=0)[:n]
+
+# Add Noise to Real Target =====================================================
+            a = alphas.index_select(dim=0, index=t).view(-1, 1, 1, 1)
+            xt = real_targets*a.sqrt() + e*(1.0 - a).sqrt()
+
+# Predict Noise from Input and Noisy Target ===================================
+            pred_e = model(torch.cat([inputs, xt], dim=1), t.float())
+
+# Calculate Loss ===============================================================
+            loss = criterion(e, pred_e)
+
+# Train Model==== ============================================================== 
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+# Update EMA ===================================================================
+            if params['model']['ema']:
+                ema_helper.update(model)
 
 # Log Loss =====================================================================
-            D_losses.append(loss_D.item())
-            G_losses.append(loss_G.item())
+            losses.append(loss.item())
 
             if params['log_per_iteration'] == 1:
                 log_condition = True
@@ -202,24 +267,18 @@ if __name__ == "__main__":
                 log_condition = (iteration > 0) and ((iteration+1) % params['log_per_iteration'] == 0)
                 epoch_log_condition = (iteration > 0) and (((iteration+1) % params['log_per_iteration'] == 0) or ((iteration+1) % iter_per_epoch == 0))
             if log_condition:
-                # train_loop.set_postfix(
-                #     D_loss = loss_D.item(),
-                #     G_loss = loss_G.item(),
-                # )
-                writer.add_scalar("D_loss_step", loss_D.item(), iteration)
-                writer.add_scalar("G_loss_step", loss_G.item(), iteration)
+                writer.add_scalar("loss_step", loss.item(), iteration)
             if epoch_log_condition:
                 writer.add_scalar("epoch", epoch, iteration)
 
 # Update Iteration ============================================================
             iteration += 1
-                
+
 # Save latest checkpoint ======================================================
         state = {
-                'net_G': net_G.state_dict(),
-                'net_D': net_D.state_dict(),
-                'optim_G': optim_G.state_dict(),
-                'optim_D': optim_D.state_dict(),
+                'model': model.state_dict(),
+                'model_ema': ema_helper.state_dict(),
+                'optimizer': optimizer.state_dict(),
                 'epoch': epoch,
                 'iteration': iteration-1,
                 'hparams': cfg
@@ -227,19 +286,24 @@ if __name__ == "__main__":
         torch.save(state, output_model_dir/"last.ckpt")
 
 # Log to tensorboard, file ====================================================
-        D_loss_avg = sum(D_losses) / len(D_losses)
-        G_loss_avg = sum(G_losses) / len(G_losses)
-        writer.add_scalar("D_loss_epoch", D_loss_avg, iteration-1)
-        writer.add_scalar("G_loss_epoch", G_loss_avg, iteration-1)
-        # logger.info(f"Epoch {epoch}: D_loss={D_loss_avg}, G_loss={G_loss_avg}")
+        loss_avg = sum(losses) / len(losses)
+        writer.add_scalar("loss_epoch", loss_avg, iteration-1)
         
 # Save images ==================================================================
         if epoch % params['save_img_per_epoch'] == 0 or epoch == params['num_epochs'] - 1:
-            net_G.eval()
+            model.eval()
             with torch.no_grad():
                 for inputs, real_targets in train_loader:
-                    inputs = inputs.to(device)
-                    fake_targets = net_G(inputs)
+                    inputs = inputs[0].unsqueeze(0).to(device)
+                    real_targets = real_targets[0].unsqueeze(0).to(device)
+                    fake_targets = sample_image(
+                        config=cfg,
+                        model=model,
+                        input_image=inputs,
+                        initial_noise=initial_noise,
+                        device=device,
+                        create_list=False
+                    )
                     train_dataset.save_image(fake_targets[0], output_image_train_dir/f"{epoch}_{iteration-1}_fake.png")
                     train_dataset.save_image(real_targets[0], output_image_train_dir/f"{epoch}_{iteration-1}_real.png")
                     train_fig = train_dataset.create_figure(inputs[0], real_targets[0], fake_targets[0])
@@ -247,21 +311,30 @@ if __name__ == "__main__":
                     break
                 for inputs, real_targets in val_loader:
                     inputs = inputs.to(device)
-                    fake_targets = net_G(inputs)
+                    fake_targets = sample_image(
+                        config=cfg,
+                        model=model,
+                        input_image=inputs,
+                        initial_noise=initial_noise,
+                        device=device,
+                        create_list=False
+                    )
                     val_dataset.save_image(fake_targets[0], output_image_val_dir/f"{epoch}_{iteration-1}_fake.png")
                     val_dataset.save_image(real_targets[0], output_image_val_dir/f"{epoch}_{iteration-1}_real.png")
                     break
                 val_fig = val_dataset.create_figure(inputs[0], real_targets[0], fake_targets[0])
                 writer.add_figure("val", val_fig, iteration-1)
-            net_G.train()
 
 # Save model ===================================================================
         if epoch % params['save_state_per_epoch'] == 0 or epoch == params['num_epochs'] - 1:
             # torch.save(state, output_model_dir/f"{epoch}_{iteration-1}_checkpoint.pth")
             try:
-                torch.save(net_G.module.state_dict(), output_model_dir/f"{epoch}_{iteration-1}_G.pth")
+                torch.save(model.module.state_dict(), output_model_dir/f"{epoch}_{iteration-1}.pth")
+                torch.save(ema_helper.module.state_dict(), output_model_dir/f"{epoch}_{iteration-1}_ema.pth")
             except:
-                torch.save(net_G.state_dict(), output_model_dir/f"{epoch}_{iteration-1}_G.pth")
+                torch.save(model.state_dict(), output_model_dir/f"{epoch}_{iteration-1}.pth")
+                torch.save(ema_helper.state_dict(), output_model_dir/f"{epoch}_{iteration-1}_ema.pth")
+
 
 # End Training ================================================================
     end_time = perf_counter()

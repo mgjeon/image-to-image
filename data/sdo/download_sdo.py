@@ -113,7 +113,7 @@ class SDODownloader:
         try:
             wavelnth = 'hmi' if header['WAVELNTH'] == 6173 else header['WAVELNTH']
             ds_dir = self.ds_path / str(wavelnth)
-            map_path = ds_dir / '{}.fits'.format(t.isoformat('T', timespec='seconds'))
+            map_path = ds_dir / '{}.fits'.format(t.isoformat('T', timespec='seconds').replace(':', '-'))
             if map_path.exists():
                 return map_path
             # load map

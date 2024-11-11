@@ -51,16 +51,16 @@ params:
       name: L1Loss
       args:
         lambdaL1: 100
-  num_epochs: 50
+  num_epochs: 2
   log_per_iteration: 10
   save_img_per_epoch: 1
-  save_state_per_epoch: 50
+  save_state_per_epoch: 1
   save_top_k: -1
   seed: 42
   float32_matmul_precision: "high"
   accelerator: "cuda"
   devices: [0]
   precision: "32-true"
-  strategy: "auto"
+  strategy: "ddp"
   output_dir: ./results/sdo/simple
   resume_from: null
