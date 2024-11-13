@@ -1,10 +1,11 @@
 from networks_ddim import Model
+from networks_simple import NaiveUnet
 
 # =============================================================================
-def define_model(cfg):
-    name = cfg['model']['name']
-    args = cfg['model']['args']
-    image_size = cfg['data']['image_size']
+def define_model(model_cfg):
+
+    name = model_cfg['name']
+    args = model_cfg['args']
     # num_timesteps = cfg['params']['diffusion']['num_timesteps']
 
     if name == 'ddim_unet':
@@ -17,8 +18,14 @@ def define_model(cfg):
             attn_resolutions=args['attn_resolutions'],
             dropout=args['dropout'],
             resamp_with_conv=args['resamp_with_conv'],
-            resolution=image_size,
+            resolution=args['resolution'],
             # num_timesteps=num_timesteps
+        )
+    elif name == 'simple':
+        model = NaiveUnet(
+            in_channels=args['input_nc'],
+            out_channels=args['output_nc'],
+            n_feat=args['n_feat']
         )
     else:
         raise NotImplementedError(f"Model name '{name}' is not implemented")

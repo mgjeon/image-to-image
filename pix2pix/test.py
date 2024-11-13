@@ -27,7 +27,7 @@ def get_next_version(output_dir):
 
 
 # Metrics ========================================================================
-def calculate_metrics(model, loader, device, log_dir, args, stage="Validation"):
+def calculate_metrics(model, dataset, loader, device, log_dir, output_dir, args, stage="Validation"):
     binning = args.binning
     subsample = args.subsample
     model.eval()
@@ -48,16 +48,19 @@ def calculate_metrics(model, loader, device, log_dir, args, stage="Validation"):
         ssims_binning = []
         pearsons_binning = []
 
-        for i, (inputs, real_target) in enumerate(tqdm(loader, desc=stage)):
+        for i, (inputs, real_target, _, target_name) in enumerate(tqdm(loader, desc=stage)):
             inputs = inputs.to(device)
             real_target = real_target.to(device)
             fake_target = model(inputs)
             if i == 0:
-                fig = val_dataset.create_figure(inputs[0], real_target[0], fake_target[0])
+                fig = dataset.create_figure(inputs[0], real_target[0], fake_target[0])
                 fig.savefig(log_dir / f"{stage}_example.png")
                 print(inputs.shape)
                 print(real_target.shape)
                 print(fake_target.shape)
+            
+            dataset.save_image(fake_target[0], output_dir / f"{target_name[0]}_fake.png")
+            dataset.save_image(real_target[0], output_dir / f"{target_name[0]}_real.png")
             
             mae_value = mae(fake_target, real_target)
             pixel_to_pixel_cc = pearson(fake_target.flatten(), real_target.flatten())
@@ -78,7 +81,7 @@ def calculate_metrics(model, loader, device, log_dir, args, stage="Validation"):
             real_target_binning = avgpool2d(real_target)
             fake_target_binning = avgpool2d(fake_target)
             if i == 0:
-                fig = val_dataset.create_figure(inputs[0], real_target_binning[0], fake_target_binning[0])
+                fig = dataset.create_figure(inputs[0], real_target_binning[0], fake_target_binning[0])
                 fig.savefig(log_dir / f"{stage}_example_binning.png")
                 print(inputs_binning.shape)
                 print(real_target_binning.shape)
@@ -190,7 +193,10 @@ if __name__ == "__main__":
         drop_last=data['test']['drop_last']
     )
 
-    log_dir = Path(args.model).parent.parent / "metrics"
+    log_root = Path(args.model).parent.parent / "metrics"
+    log_root.mkdir(parents=True, exist_ok=True)
+    version = get_next_version(log_root)
+    log_dir = log_root / f"version_{version}"
     log_dir.mkdir(parents=True, exist_ok=True)
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
@@ -199,29 +205,51 @@ if __name__ == "__main__":
     with open(log_dir / "config.yaml", "w") as file:
         yaml.dump(args, file)
 
-    val_metrics = calculate_metrics(G, val_loader, device, log_dir, args, stage="Validation")
+    val_dir = log_dir / "val"
+    val_dir.mkdir(parents=True, exist_ok=True)
+    val_metrics = calculate_metrics(
+        model=G,
+        dataset=val_dataset,
+        loader=val_loader,
+        device=device,
+        log_dir=log_dir,
+        output_dir=val_dir,
+        args=args,
+        stage="Validation"
+    )
     with open(log_dir / "val_metrics.yaml", "w") as file:
         yaml.dump(val_metrics, file)
     logger.info(f"Validation MAE: {val_metrics['MAE']:.2f}")
     logger.info(f"Validation PSNR: {val_metrics['PSNR']:.2f}")
     logger.info(f"Validation SSIM: {val_metrics['SSIM']:.2f}")
-    logger.info(f"Validation Pixel-to-Pixel Pearson CC: {val_metrics['Pearson']:.2f}")
+    logger.info(f"Validation Pixel-to-Pixel Pearson CC: {val_metrics['Pearson']:.4f}")
     logger.info(f"Validation MAE (binning): {val_metrics['MAE_binning']:.2f}")
     logger.info(f"Validation PSNR (binning): {val_metrics['PSNR_binning']:.2f}")
     logger.info(f"Validation SSIM (binning): {val_metrics['SSIM_binning']:.2f}")
-    logger.info(f"Validation Pixel-to-Pixel Pearson CC (binning): {val_metrics['Pearson_binning']:.2f}")
+    logger.info(f"Validation Pixel-to-Pixel Pearson CC (binning): {val_metrics['Pearson_binning']:.4f}")
 
-    test_metrics = calculate_metrics(G, test_loader, device, log_dir, args, stage="Test")
+    test_dir = log_dir / "test"
+    test_dir.mkdir(parents=True, exist_ok=True)
+    test_metrics = calculate_metrics(
+        model=G,
+        dataset=test_dataset,
+        loader=test_loader,
+        device=device,
+        log_dir=log_dir,
+        output_dir=test_dir,
+        args=args,
+        stage="Test"
+    )
     with open(log_dir / "test_metrics.yaml", "w") as file:
         yaml.dump(test_metrics, file)
     logger.info(f"Test MAE: {test_metrics['MAE']:.2f}")
     logger.info(f"Test PSNR: {test_metrics['PSNR']:.2f}")
     logger.info(f"Test SSIM: {test_metrics['SSIM']:.2f}")
-    logger.info(f"Test Pixel-to-Pixel Pearson CC: {test_metrics['Pearson']:.2f}")
+    logger.info(f"Test Pixel-to-Pixel Pearson CC: {test_metrics['Pearson']:.4f}")
     logger.info(f"Test MAE (binning): {test_metrics['MAE_binning']:.2f}")
     logger.info(f"Test PSNR (binning): {test_metrics['PSNR_binning']:.2f}")
     logger.info(f"Test SSIM (binning): {test_metrics['SSIM_binning']:.2f}")
-    logger.info(f"Test Pixel-to-Pixel Pearson CC (binning): {test_metrics['Pearson_binning']:.2f}")
+    logger.info(f"Test Pixel-to-Pixel Pearson CC (binning): {test_metrics['Pearson_binning']:.4f}")
 
 
 

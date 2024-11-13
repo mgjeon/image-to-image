@@ -206,7 +206,7 @@ class Model(nn.Module):
             # num_timesteps,    # number of diffusion timesteps
         ):
         super().__init__()
-        in_channels = input_nc + output_nc   # input image + noisy target image
+        in_channels = input_nc   # input image + noisy target image
         ch_mult = tuple(ch_mult)
         # self.config = config
         # ch, out_ch, ch_mult = config.model.ch, config.model.out_ch, tuple(config.model.ch_mult)

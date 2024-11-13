@@ -1,3 +1,5 @@
+name: "171_304 to 193 (Pix2Pix, Simple)"
+
 data:
   ext: npy
   image_size: 256
@@ -25,6 +27,7 @@ data:
     num_workers: 0
     pin_memory: true
     drop_last: false
+
 model:
   generator:
     name: simple_G
@@ -37,6 +40,7 @@ model:
     args:
       in_channels: 3
       features: [64, 128, 256, 512]
+      
 params:
   optimizer:
     name: Adam

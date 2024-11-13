@@ -5,6 +5,7 @@ import argparse
 from pathlib import Path
 from time import perf_counter
 from tqdm import tqdm
+from setproctitle import setproctitle
 import yaml
 import torch
 from torch import optim
@@ -40,6 +41,9 @@ if __name__ == "__main__":
             cfg['params']['resume_from'] = args.resume_from
         if args.num_epochs is not None:
             cfg['params']['num_epochs'] = args.num_epochs
+
+# Set process name =============================================================
+    setproctitle(cfg["name"])
 
 # Set device ====================================================================
     assert isinstance(params['devices'], list)
@@ -138,6 +142,9 @@ if __name__ == "__main__":
     output_model_dir = log_dir / "checkpoints"
     output_model_dir.mkdir(parents=True, exist_ok=True)
 
+    with open(output_model_dir / "config.yaml", "w") as file:
+        yaml.dump(cfg["model"], file)
+
     if params['resume_from'] is not None:
         checkpoint = torch.load(params['resume_from'])
         start_epoch = checkpoint['epoch'] + 1
@@ -169,7 +176,7 @@ if __name__ == "__main__":
         G_losses = []
         train_loop = tqdm(train_loader, leave=True)
         train_loop.set_description(f"Epoch {epoch}")
-        for batch_idx, (inputs, real_targets) in enumerate(train_loop):
+        for batch_idx, (inputs, real_targets, _, _) in enumerate(train_loop):
             # print(batch_idx)
             # print(inputs.shape)
             # print(real_target.shape)
@@ -237,7 +244,7 @@ if __name__ == "__main__":
         if epoch % params['save_img_per_epoch'] == 0 or epoch == params['num_epochs'] - 1:
             net_G.eval()
             with torch.no_grad():
-                for inputs, real_targets in train_loader:
+                for inputs, real_targets, _, _ in train_loader:
                     inputs = inputs.to(device)
                     fake_targets = net_G(inputs)
                     train_dataset.save_image(fake_targets[0], output_image_train_dir/f"{epoch}_{iteration-1}_fake.png")
@@ -245,7 +252,7 @@ if __name__ == "__main__":
                     train_fig = train_dataset.create_figure(inputs[0], real_targets[0], fake_targets[0])
                     writer.add_figure("train", train_fig, iteration-1)
                     break
-                for inputs, real_targets in val_loader:
+                for inputs, real_targets, _, _ in val_loader:
                     inputs = inputs.to(device)
                     fake_targets = net_G(inputs)
                     val_dataset.save_image(fake_targets[0], output_image_val_dir/f"{epoch}_{iteration-1}_fake.png")

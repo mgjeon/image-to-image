@@ -2,9 +2,9 @@ from networks_simple import SimpleGenerator, SimpleDiscriminator
 from networks_pix2pix import get_norm_layer, init_weights, ResnetGenerator, UnetGenerator, NLayerDiscriminator, PixelDiscriminator
 
 # =============================================================================
-def define_G(cfg):
-    name_G = cfg['model']['generator']['name']
-    args = cfg['model']['generator']['args']
+def define_G(model_cfg):
+    name_G = model_cfg['generator']['name']
+    args = model_cfg['generator']['args']
 
     if name_G == 'simple_G':
         net_G = SimpleGenerator(
@@ -39,9 +39,9 @@ def define_G(cfg):
     return net_G
 
 
-def define_D(cfg):
-    name_D = cfg['model']['discriminator']['name']
-    args = cfg['model']['discriminator']['args']
+def define_D(model_cfg):
+    name_D = model_cfg['discriminator']['name']
+    args = model_cfg['discriminator']['args']
 
     if name_D == 'simple_D':
         net_D = SimpleDiscriminator(

@@ -30,7 +30,7 @@ def get_next_version(output_dir):
 
 
 # Metrics ========================================================================
-def calculate_metrics(model, cfg, initial_noise, loader, device, log_dir, args, stage="Validation"):
+def calculate_metrics(model, cfg, initial_noise, dataset, loader, device, log_dir, output_dir, args, stage="Validation"):
     binning = args.binning
     subsample = args.subsample
     model.eval()
@@ -51,7 +51,7 @@ def calculate_metrics(model, cfg, initial_noise, loader, device, log_dir, args, 
         ssims_binning = []
         pearsons_binning = []
 
-        for i, (inputs, real_target) in enumerate(tqdm(loader, desc=stage)):
+        for i, (inputs, real_target, _, target_name) in enumerate(tqdm(loader, desc=stage)):
             inputs = inputs.to(device)
             real_target = real_target.to(device)
             fake_target = sample_image(
@@ -63,11 +63,14 @@ def calculate_metrics(model, cfg, initial_noise, loader, device, log_dir, args, 
                 create_list=False
             )
             if i == 0:
-                fig = val_dataset.create_figure(inputs[0], real_target[0], fake_target[0])
+                fig = dataset.create_figure(inputs[0], real_target[0], fake_target[0])
                 fig.savefig(log_dir / f"{stage}_example.png")
                 print(inputs.shape)
                 print(real_target.shape)
                 print(fake_target.shape)
+
+            dataset.save_image(fake_target[0], output_dir / f"{target_name[0]}_fake.png")
+            dataset.save_image(real_target[0], output_dir / f"{target_name[0]}_real.png")
             
             mae_value = mae(fake_target, real_target)
             pixel_to_pixel_cc = pearson(fake_target.flatten(), real_target.flatten())
@@ -168,7 +171,7 @@ if __name__ == "__main__":
         data = cfg['data']
         params = cfg['params']
 
-    model = define_model(cfg)
+    model = define_model(cfg["model"])
     model_pth = torch.load(args.model, map_location=device, weights_only=True)
     model.load_state_dict(model_pth)
     model = model.to(device)
@@ -230,29 +233,55 @@ if __name__ == "__main__":
     logger.info(f"Number of timesteps: {args.num_timesteps}")
     logger.info(f"Total steps: {len(range(0, args.num_timesteps, args.num_timesteps//args.timesteps))}")
 
-    val_metrics = calculate_metrics(model, cfg, initial_noise, val_loader, device, log_dir, args, stage="Validation")
+    val_dir = log_dir / "val"
+    val_dir.mkdir(parents=True, exist_ok=True)
+    val_metrics = calculate_metrics(
+        model=model,
+        cfg=cfg,
+        initial_noise=initial_noise,
+        dataset=val_dataset,
+        loader=val_loader,
+        device=device,
+        log_dir=log_dir,
+        output_dir=val_dir,
+        args=args,
+        stage="Validation"
+    )
     with open(log_dir / "val_metrics.yaml", "w") as file:
         yaml.dump(val_metrics, file)
     logger.info(f"Validation MAE: {val_metrics['MAE']:.2f}")
     logger.info(f"Validation PSNR: {val_metrics['PSNR']:.2f}")
     logger.info(f"Validation SSIM: {val_metrics['SSIM']:.2f}")
-    logger.info(f"Validation Pixel-to-Pixel Pearson CC: {val_metrics['Pearson']:.2f}")
+    logger.info(f"Validation Pixel-to-Pixel Pearson CC: {val_metrics['Pearson']:.4f}")
     logger.info(f"Validation MAE (binning): {val_metrics['MAE_binning']:.2f}")
     logger.info(f"Validation PSNR (binning): {val_metrics['PSNR_binning']:.2f}")
     logger.info(f"Validation SSIM (binning): {val_metrics['SSIM_binning']:.2f}")
-    logger.info(f"Validation Pixel-to-Pixel Pearson CC (binning): {val_metrics['Pearson_binning']:.2f}")
+    logger.info(f"Validation Pixel-to-Pixel Pearson CC (binning): {val_metrics['Pearson_binning']:.4f}")
 
-    test_metrics = calculate_metrics(model, cfg, initial_noise, test_loader, device, log_dir, args, stage="Test")
+    test_dir = log_dir / "test"
+    test_dir.mkdir(parents=True, exist_ok=True)
+    test_metrics = calculate_metrics(
+        model=model,
+        cfg=cfg,
+        initial_noise=initial_noise,
+        dataset=test_dataset,
+        loader=test_loader,
+        device=device,
+        log_dir=log_dir,
+        output_dir=test_dir,
+        args=args,
+        stage="Test"
+    )
     with open(log_dir / "test_metrics.yaml", "w") as file:
         yaml.dump(test_metrics, file)
     logger.info(f"Test MAE: {test_metrics['MAE']:.2f}")
     logger.info(f"Test PSNR: {test_metrics['PSNR']:.2f}")
     logger.info(f"Test SSIM: {test_metrics['SSIM']:.2f}")
-    logger.info(f"Test Pixel-to-Pixel Pearson CC: {test_metrics['Pearson']:.2f}")
+    logger.info(f"Test Pixel-to-Pixel Pearson CC: {test_metrics['Pearson']:.4f}")
     logger.info(f"Test MAE (binning): {test_metrics['MAE_binning']:.2f}")
     logger.info(f"Test PSNR (binning): {test_metrics['PSNR_binning']:.2f}")
     logger.info(f"Test SSIM (binning): {test_metrics['SSIM_binning']:.2f}")
-    logger.info(f"Test Pixel-to-Pixel Pearson CC (binning): {test_metrics['Pearson_binning']:.2f}")
+    logger.info(f"Test Pixel-to-Pixel Pearson CC (binning): {test_metrics['Pearson_binning']:.4f}")
 
 
 

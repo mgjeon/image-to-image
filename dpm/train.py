@@ -5,6 +5,7 @@ import argparse
 from pathlib import Path
 from time import perf_counter
 from tqdm import tqdm
+from setproctitle import setproctitle
 import yaml
 import torch
 from torch import optim
@@ -43,7 +44,10 @@ if __name__ == "__main__":
         if args.num_epochs is not None:
             cfg['params']['num_epochs'] = args.num_epochs
 
-# Set device ====================================================================
+# Set process name =============================================================
+    setproctitle(cfg["name"])
+
+# Set device ===================================================================
     assert isinstance(params['devices'], list)
     devices = ",".join(map(str, params['devices'])) if len(params['devices']) > 1 else str(params['devices'][0])
     print(f"Using devices: {devices}")
@@ -71,7 +75,7 @@ if __name__ == "__main__":
     torch.set_float32_matmul_precision(params['float32_matmul_precision'])
 
 # Model ========================================================================
-    model = define_model(cfg)
+    model = define_model(cfg["model"])
     if torch.cuda.device_count() > 1:
         model = torch.nn.DataParallel(model)
         cfg['params']['strategy'] = "dp"
@@ -80,7 +84,7 @@ if __name__ == "__main__":
 # Optimizer ====================================================================
     if params['optimizer']['name'] == "Adam":
         args = params['optimizer']['args']
-        optimizer = optim.Adam(model.parameters(), lr=args['lr'])
+        optimizer = optim.Adam(model.parameters(), lr=args['lr'], betas=args['betas'])
     else:
         raise NotImplementedError("Optimizer not implemented")
 
@@ -135,6 +139,9 @@ if __name__ == "__main__":
 
     output_model_dir = log_dir / "checkpoints"
     output_model_dir.mkdir(parents=True, exist_ok=True)
+
+    with open(output_model_dir / "config.yaml", "w") as file:
+        yaml.dump(cfg["model"], file)
 
     if params['resume_from'] is not None:
         checkpoint = torch.load(params['resume_from'], map_location=device)
@@ -200,7 +207,7 @@ if __name__ == "__main__":
         losses = []
         train_loop = tqdm(train_loader, leave=True)
         train_loop.set_description(f"Epoch {epoch}")
-        for batch_idx, (inputs, real_targets) in enumerate(train_loop):
+        for batch_idx, (inputs, real_targets, _, _) in enumerate(train_loop):
             model.train()
             # print(batch_idx)
             # print(inputs.shape)
@@ -251,6 +258,13 @@ if __name__ == "__main__":
 # Train Model==== ============================================================== 
             optimizer.zero_grad()
             loss.backward()
+
+            # if params['grad_clip']['clip']:
+            #     torch.nn.utils.clip_grad_norm_(
+            #         parameters=model.parameters(),
+            #         max_norm=params['grad_clip']['max_norm']
+            #     )
+        
             optimizer.step()
 
 # Update EMA ===================================================================
@@ -293,7 +307,7 @@ if __name__ == "__main__":
         if epoch % params['save_img_per_epoch'] == 0 or epoch == params['num_epochs'] - 1:
             model.eval()
             with torch.no_grad():
-                for inputs, real_targets in train_loader:
+                for inputs, real_targets, _, _ in train_loader:
                     inputs = inputs[0].unsqueeze(0).to(device)
                     real_targets = real_targets[0].unsqueeze(0).to(device)
                     fake_targets = sample_image(
@@ -309,7 +323,7 @@ if __name__ == "__main__":
                     train_fig = train_dataset.create_figure(inputs[0], real_targets[0], fake_targets[0])
                     writer.add_figure("train", train_fig, iteration-1)
                     break
-                for inputs, real_targets in val_loader:
+                for inputs, real_targets, _, _ in val_loader:
                     inputs = inputs.to(device)
                     fake_targets = sample_image(
                         config=cfg,

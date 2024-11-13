@@ -8,6 +8,8 @@ class Loss:
         self.loss_args = cfg['params']['loss']['args']
         if loss_name == 'MSELoss':
             self.loss = nn.MSELoss(reduction=self.loss_args['reduction'])
+        elif loss_name == 'L1Loss':
+            self.loss = nn.L1Loss(reduction=self.loss_args['reduction'])
         else:
             raise NotImplementedError(f"Loss {loss_name} not implemented")
         

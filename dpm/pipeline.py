@@ -65,7 +65,7 @@ class AlignedDataset(Dataset):
         else:
             raise NotImplementedError("File extension not supported")
         
-        return input_image, target_image
+        return input_image, target_image, input_file.stem, target_file.stem
     
 # Setup transform ========================================================================================
     def setup_transform(self):
@@ -227,9 +227,11 @@ if __name__ == "__main__":
     )
     print(len(dataset))
     loader = DataLoader(dataset, batch_size=5)
-    for x, y in loader:
+    for x, y, xf, yf in loader:
         print(x.shape)
         print(y.shape)
+        print(xf)
+        print(yf)
         # dataset.save_image(x[0], "x_input.png")
         # dataset.save_image(y[0], "y_target.png")
         fig = dataset.create_figure(x[0], y[0], y[0])
