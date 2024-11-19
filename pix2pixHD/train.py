@@ -11,6 +11,9 @@ import torch
 from torch import optim
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
+from torchmetrics import MeanAbsoluteError
+from torchmetrics.regression import PearsonCorrCoef
+from torchmetrics.image import PeakSignalNoiseRatio, StructuralSimilarityIndexMeasure
 
 from pipeline import AlignedDataset
 from networks import define_G, define_D
@@ -170,6 +173,12 @@ if __name__ == "__main__":
     else:
         ema_helper = None
 
+# Metrics ======================================================================
+    mae = MeanAbsoluteError().to(device)
+    psnr = PeakSignalNoiseRatio().to(device)
+    ssim = StructuralSimilarityIndexMeasure().to(device)
+    pearson = PearsonCorrCoef().to(device)
+
 # Start Training ===============================================================
     logger.info(f"Output directory: {output_dir.resolve()}")
     start_time = perf_counter()
@@ -240,7 +249,7 @@ if __name__ == "__main__":
 
 # Update Iteration ============================================================
             iteration += 1
-                
+
 # Save latest checkpoint ======================================================
         state = {
                 'net_G': net_G.state_dict(),
@@ -265,21 +274,48 @@ if __name__ == "__main__":
             net_G.eval()
             with torch.no_grad():
                 for inputs, real_targets, _, _ in train_loader:
-                    inputs = inputs.to(device)
+                    inputs = inputs[0].unsqueeze(0).to(device)
+                    real_targets = real_targets[0].unsqueeze(0)
                     fake_targets = net_G(inputs)
+                    real_targets = real_targets.to(device)
+                    fake_targets = fake_targets.to(device)
+
                     train_dataset.save_image(fake_targets[0], output_image_train_dir/f"{epoch}_{iteration-1}_fake.png")
                     train_dataset.save_image(real_targets[0], output_image_train_dir/f"{epoch}_{iteration-1}_real.png")
                     train_fig = train_dataset.create_figure(inputs[0], real_targets[0], fake_targets[0])
-                    writer.add_figure("train", train_fig, iteration-1)
+                    writer.add_figure("train/image", train_fig, iteration-1)
+
+                    mae_value = mae(fake_targets, real_targets)
+                    pixel_to_pixel_cc = pearson(fake_targets.flatten(), real_targets.flatten())
+                    psnr_value = psnr(fake_targets, real_targets)
+                    ssim_value = ssim(fake_targets, real_targets)
+                    writer.add_scalar("train/mae", mae_value.item(), iteration-1)
+                    writer.add_scalar("train/cc", pixel_to_pixel_cc.item(), iteration-1)
+                    writer.add_scalar("train/psnr", psnr_value.item(), iteration-1)
+                    writer.add_scalar("train/ssim", ssim_value.item(), iteration-1)
                     break
                 for inputs, real_targets, _, _ in val_loader:
-                    inputs = inputs.to(device)
+                    inputs = inputs[0].unsqueeze(0).to(device)
+                    real_targets = real_targets[0].unsqueeze(0)
                     fake_targets = net_G(inputs)
+                    real_targets = real_targets.to(device)
+                    fake_targets = fake_targets.to(device)
+
                     val_dataset.save_image(fake_targets[0], output_image_val_dir/f"{epoch}_{iteration-1}_fake.png")
                     val_dataset.save_image(real_targets[0], output_image_val_dir/f"{epoch}_{iteration-1}_real.png")
+                    val_fig = val_dataset.create_figure(inputs[0], real_targets[0], fake_targets[0])
+                    writer.add_figure("val/image", val_fig, iteration-1)
+
+                    mae_value = mae(fake_targets, real_targets)
+                    pixel_to_pixel_cc = pearson(fake_targets.flatten(), real_targets.flatten())
+                    psnr_value = psnr(fake_targets, real_targets)
+                    ssim_value = ssim(fake_targets, real_targets)
+                    writer.add_scalar("val/mae", mae_value.item(), iteration-1)
+                    writer.add_scalar("val/cc", pixel_to_pixel_cc.item(), iteration-1)
+                    writer.add_scalar("val/psnr", psnr_value.item(), iteration-1)
+                    writer.add_scalar("val/ssim", ssim_value.item(), iteration-1)
                     break
-                val_fig = val_dataset.create_figure(inputs[0], real_targets[0], fake_targets[0])
-                writer.add_figure("val", val_fig, iteration-1)
+               
             net_G.train()
 
 # Save model ===================================================================

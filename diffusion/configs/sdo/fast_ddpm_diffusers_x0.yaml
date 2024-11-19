@@ -1,4 +1,4 @@
-name: "171_304 to 193 (Fast-DDPM)"
+name: "171_304 to 193 (Fast-DDPM, pred_x0)"
 
 data:
   ext: npy
@@ -15,7 +15,7 @@ data:
     input_dir: /home/mgj/workspace/mgjeon/image-to-image/data/sdo/aia_dataset/val/input
     target_dir: /home/mgj/workspace/mgjeon/image-to-image/data/sdo/aia_dataset/val/target
     batch_size: 1
-    shuffle: false
+    shuffle: true
     num_workers: 0
     pin_memory: false
     drop_last: false
@@ -68,6 +68,7 @@ params:
     beta_end: 0.02
     num_timesteps: 1000
     fast_ddpm: True
+    clip_noise: True
   sampling:
     fixed_initial_noise: True
     eta: 0.0

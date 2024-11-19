@@ -230,6 +230,8 @@ if __name__ == "__main__":
             data['image_size'],
             device=device
     )
+    if params['diffusion']['clip_noise']:
+        initial_noise = initial_noise.clamp(-1, 1)
     print("Using fixed initial noise")
 
     cfg['params']['diffusion']['num_timesteps'] = args.num_timesteps

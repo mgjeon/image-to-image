@@ -11,6 +11,9 @@ import torch
 from torch import optim
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
+from torchmetrics import MeanAbsoluteError
+from torchmetrics.regression import PearsonCorrCoef
+from torchmetrics.image import PeakSignalNoiseRatio, StructuralSimilarityIndexMeasure
 
 from pipeline import AlignedDataset
 from networks import define_model
@@ -194,9 +197,17 @@ if __name__ == "__main__":
             data['image_size'],
             device=device
         )
+        if params['diffusion']['clip_noise']:
+            initial_noise = initial_noise.clamp(-1, 1)
         print("Using fixed initial noise")
     else:
         initial_noise = None
+
+# Metrics ======================================================================
+    mae = MeanAbsoluteError().to(device)
+    psnr = PeakSignalNoiseRatio().to(device)
+    ssim = StructuralSimilarityIndexMeasure().to(device)
+    pearson = PearsonCorrCoef().to(device)
 
 # Start Training ===============================================================
     logger.info(f"Output directory: {output_dir.resolve()}")
@@ -228,6 +239,8 @@ if __name__ == "__main__":
 # Generate Noise ===============================================================
             # (n, ch_out, h, w)
             e = torch.randn_like(real_targets)
+            if params['diffusion']['clip_noise']:
+                e = e.clamp(-1, 1)
             n = e.shape[0]
 
 # Antithetic Sampling for Diffusion Timesteps ==================================
@@ -254,7 +267,7 @@ if __name__ == "__main__":
 # Prediction & Loss ============================================================
             if params['pred'] == 'noise':
 # Predict Noise from Input and Noisy Target ===================================
-                pred_e = model(torch.cat([inputs, xt], dim=1), t.float())
+                pred_e = model(torch.cat((inputs, xt), dim=1), t.float())
                 loss = criterion(
                     true_noise=e, 
                     pred_noise=pred_e
@@ -262,22 +275,27 @@ if __name__ == "__main__":
             
             elif params['pred'] == 'x0':
 # Predict x0 from Input and Noisy Target ======================================
-                pred_e = model(torch.cat([inputs, xt], dim=1), t.float())
-                pred_x0 = (xt - pred_e*(1.0 - a).sqrt()) / a.sqrt()
+                # pred_e = model(torch.cat([inputs, xt], dim=1), t.float())
+                # pred_x0 = (xt - pred_e*(1.0 - a).sqrt()) / a.sqrt()
+                # loss = criterion(
+                #     true_x0=real_targets, 
+                #     pred_x0=pred_x0
+                # )
+                pred_x0 = model(torch.cat((inputs, xt), dim=1), t.float())
+                # pred_noise = (xt - pred_x0*a.sqrt()) / (1.0 - a).sqrt()
                 loss = criterion(
-                    true_x0=real_targets, 
-                    pred_x0=pred_x0
-                )
-            
-            elif params['pred'] == 'both':
-                pred_e = model(torch.cat([inputs, xt], dim=1), t.float())
-                pred_x0 = (xt - pred_e*(1.0 - a).sqrt()) / a.sqrt()
-                loss = criterion(
-                    true_noise=e,
-                    pred_noise=pred_e,
                     true_x0=real_targets,
                     pred_x0=pred_x0
                 )
+            # elif params['pred'] == 'both':
+            #     pred_e = model(torch.cat((inputs, xt), dim=1), t.float())
+            #     pred_x0 = (xt - pred_e*(1.0 - a).sqrt()) / a.sqrt()
+            #     loss = criterion(
+            #         true_noise=e,
+            #         pred_noise=pred_e,
+            #         true_x0=real_targets,
+            #         pred_x0=pred_x0
+            #     )
                 
 # Train Model ================================================================== 
             optimizer.zero_grad()
@@ -334,7 +352,7 @@ if __name__ == "__main__":
             with torch.no_grad():
                 for inputs, real_targets, _, _ in train_loader:
                     inputs = inputs[0].unsqueeze(0).to(device)
-                    real_targets = real_targets[0].unsqueeze(0).to(device)
+                    real_targets = real_targets[0].unsqueeze(0)
                     fake_targets = sample_image(
                         config=cfg,
                         model=model,
@@ -343,13 +361,31 @@ if __name__ == "__main__":
                         device=device,
                         create_list=False
                     )
+                    real_targets = real_targets.to(device)
+                    fake_targets = fake_targets.to(device)
+
                     train_dataset.save_image(fake_targets[0], output_image_train_dir/f"{epoch}_{iteration-1}_fake.png")
                     train_dataset.save_image(real_targets[0], output_image_train_dir/f"{epoch}_{iteration-1}_real.png")
                     train_fig = train_dataset.create_figure(inputs[0], real_targets[0], fake_targets[0])
-                    writer.add_figure("train", train_fig, iteration-1)
+                    writer.add_figure("train/image", train_fig, iteration-1)
+
+                    mae_value = mae(fake_targets, real_targets)
+                    pixel_to_pixel_cc = pearson(fake_targets.flatten(), real_targets.flatten())
+                    psnr_value = psnr(fake_targets, real_targets)
+                    ssim_value = ssim(fake_targets, real_targets)
+                    writer.add_scalar("train/mae", mae_value.item(), iteration-1)
+                    writer.add_scalar("train/cc", pixel_to_pixel_cc.item(), iteration-1)
+                    writer.add_scalar("train/psnr", psnr_value.item(), iteration-1)
+                    writer.add_scalar("train/ssim", ssim_value.item(), iteration-1)
+
+                    mae.reset()
+                    pearson.reset()
+                    psnr.reset()
+                    ssim.reset()
                     break
                 for inputs, real_targets, _, _ in val_loader:
-                    inputs = inputs.to(device)
+                    inputs = inputs[0].unsqueeze(0).to(device)
+                    real_targets = real_targets[0].unsqueeze(0)
                     fake_targets = sample_image(
                         config=cfg,
                         model=model,
@@ -358,11 +394,29 @@ if __name__ == "__main__":
                         device=device,
                         create_list=False
                     )
+                    real_targets = real_targets.to(device)
+                    fake_targets = fake_targets.to(device)
+
                     val_dataset.save_image(fake_targets[0], output_image_val_dir/f"{epoch}_{iteration-1}_fake.png")
                     val_dataset.save_image(real_targets[0], output_image_val_dir/f"{epoch}_{iteration-1}_real.png")
+                    val_fig = val_dataset.create_figure(inputs[0], real_targets[0], fake_targets[0])
+                    writer.add_figure("val/image", val_fig, iteration-1)
+
+                    mae_value = mae(fake_targets, real_targets)
+                    pixel_to_pixel_cc = pearson(fake_targets.flatten(), real_targets.flatten())
+                    psnr_value = psnr(fake_targets, real_targets)
+                    ssim_value = ssim(fake_targets, real_targets)
+                    writer.add_scalar("val/mae", mae_value.item(), iteration-1)
+                    writer.add_scalar("val/cc", pixel_to_pixel_cc.item(), iteration-1)
+                    writer.add_scalar("val/psnr", psnr_value.item(), iteration-1)
+                    writer.add_scalar("val/ssim", ssim_value.item(), iteration-1)
+
+                    mae.reset()
+                    pearson.reset()
+                    psnr.reset()
+                    ssim.reset()
                     break
-                val_fig = val_dataset.create_figure(inputs[0], real_targets[0], fake_targets[0])
-                writer.add_figure("val", val_fig, iteration-1)
+    
             model.train()
 
 # Save model ===================================================================

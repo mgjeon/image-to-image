@@ -1,4 +1,4 @@
-name: "171_304 to 193 (Pix2PixHD)"
+name: "171_304 to 193 (Pix2PixCC)"
 
 data:
   ext: npy
@@ -15,7 +15,7 @@ data:
     input_dir: /home/mgj/workspace/mgjeon/image-to-image/data/sdo/aia_dataset/val/input
     target_dir: /home/mgj/workspace/mgjeon/image-to-image/data/sdo/aia_dataset/val/target
     batch_size: 1
-    shuffle: false
+    shuffle: true
     num_workers: 0
     pin_memory: false
     drop_last: false

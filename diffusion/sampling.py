@@ -42,11 +42,14 @@ def sample_image(*, config, model, input_image, initial_noise=None, device=None,
             config['data']['image_size'],
             device=device
         )
+        if config['params']['diffusion']['clip_noise']:
+            xt = xt.clamp(-1, 1)
     else:
         xt = initial_noise.clone().to(device)
 
     seq_next = [-1] + list(seq[:-1])
     eta = config['params']['sampling'].get('eta', 0.0)
+    pred_type = config['params']['pred']
     # print(f"eta: {eta}")
 
     if create_list:
@@ -63,10 +66,15 @@ def sample_image(*, config, model, input_image, initial_noise=None, device=None,
 
             if create_list:
                 xt = xs[-1].to(device)
-            et = model(torch.cat([x_input, xt], dim=1), t)
 
-            # predicted x_0
-            x0_t = (xt - et * (1 - at).sqrt()) / at.sqrt()
+            if pred_type == 'noise':
+                et = model(torch.cat([x_input, xt], dim=1), t)
+                x0_t = (xt - et*(1.0 - at).sqrt()) / at.sqrt()
+
+            elif pred_type == 'x0':
+                x0_t = model(torch.cat([x_input, xt], dim=1), t)
+                et = (xt - x0_t*at.sqrt()) / (1.0 - at).sqrt()
+
             if create_list:
                 x0_preds.append(x0_t.to('cpu')) 
 
@@ -109,6 +117,8 @@ if __name__ == "__main__":
 
     input_image  = torch.randn((batch_size,  in_channels, height, width))   # Input
     initial_noise = torch.randn((batch_size, out_channels, height, width))  # Target
+    input_image = input_image.clamp(-1, 1)
+    initial_noise = initial_noise.clamp(-1, 1)
     print("Input")
     print(input_image.shape)
     print("Initial Noise (Target)")
