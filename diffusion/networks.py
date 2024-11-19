@@ -1,5 +1,6 @@
 from networks_ddim import Model
 from networks_simple import NaiveUnet
+from networks_diffusers import DiffusersUNet2DModel
 
 # =============================================================================
 def define_model(model_cfg):
@@ -19,6 +20,7 @@ def define_model(model_cfg):
             dropout=args['dropout'],
             resamp_with_conv=args['resamp_with_conv'],
             resolution=args['resolution'],
+            num_groups=args['num_groups'],
             # num_timesteps=num_timesteps
         )
     elif name == 'simple':
@@ -26,6 +28,10 @@ def define_model(model_cfg):
             in_channels=args['input_nc'],
             out_channels=args['output_nc'],
             n_feat=args['n_feat']
+        )
+    elif name == 'UNet2DModel':
+        model = DiffusersUNet2DModel(
+            **args
         )
     else:
         raise NotImplementedError(f"Model name '{name}' is not implemented")

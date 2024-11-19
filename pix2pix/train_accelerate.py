@@ -9,7 +9,7 @@ import logging
 import argparse
 from pathlib import Path
 from time import perf_counter
-# from tqdm import tqdm
+from setproctitle import setproctitle
 import yaml
 import torch
 from torch import optim
@@ -17,7 +17,6 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from accelerate import Accelerator
 from accelerate.utils.tqdm import tqdm
-# from accelerate.utils import ProjectConfiguration
 
 from pipeline import AlignedDataset
 from networks import define_G, define_D
@@ -38,14 +37,20 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', type=str, required=True)
     parser.add_argument('--resume_from', type=str, default=None)
+    parser.add_argument('--num_epochs', type=int, default=None)
     args = parser.parse_args()
     with open(args.config) as file:
         cfg = yaml.safe_load(file)
         data = cfg['data']
         params = cfg['params']
+        model_cfg = cfg['model']
         if args.resume_from is not None:
-            params['resume_from'] = args.resume_from
+            cfg['params']['resume_from'] = args.resume_from
+        if args.num_epochs is not None:
+            cfg['params']['num_epochs'] = args.num_epochs
 
+# Set process name =============================================================
+    setproctitle(cfg["name"])
 
 # Create output directory ======================================================
     output_dir = Path(params['output_dir'])
@@ -117,6 +122,12 @@ if __name__ == "__main__":
     with open(log_dir / "hparams.yaml", "w") as file:
         yaml.dump(cfg, file)
 
+    output_model_dir = log_dir / "checkpoints"
+    output_model_dir.mkdir(parents=True, exist_ok=True)
+
+    with open(output_model_dir / "config.yaml", "w") as file:
+        yaml.dump(model_cfg, file)
+
 # Setup Accelerator ============================================================
     accelerator = Accelerator()
     device = accelerator.device
@@ -131,8 +142,6 @@ if __name__ == "__main__":
     output_image_train_dir.mkdir(parents=True, exist_ok=True)
     output_image_val_dir.mkdir(parents=True, exist_ok=True)
 
-    output_model_dir = log_dir / "checkpoints"
-    output_model_dir.mkdir(parents=True, exist_ok=True)
 
     if params['resume_from'] is not None:
         # checkpoint = torch.load(params['resume_from'])
@@ -161,15 +170,14 @@ if __name__ == "__main__":
     for epoch in range(start_epoch, params['num_epochs']):
         D_losses = []
         G_losses = []
-        # train_loop = tqdm(train_loader, leave=True)
         train_loop = tqdm(total=len(train_loader), leave=True)
         train_loop.set_description(f"Epoch {epoch}")
-        for batch_idx, (inputs, real_targets) in enumerate(train_loader):
-            # print(batch_idx)
-            # print(inputs.shape)
-            # print(real_target.shape)
-            # import sys
-            # sys.exit()
+        for batch_idx, (inputs, real_targets, _, _) in enumerate(train_loop):
+            print(batch_idx)
+            print(inputs.shape)
+            print(real_targets.shape)
+            import sys
+            sys.exit()
 
             loss_G, loss_D = criterion(net_G, net_D, inputs, real_targets)
 

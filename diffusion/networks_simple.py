@@ -1,8 +1,8 @@
-# https://github.com/cloneofsimo/minDiffusion
+"""
+Adapted from: 
+    https://github.com/cloneofsimo/minDiffusion
+"""
 
-"""
-Simple Unet Structure.
-"""
 import torch
 import torch.nn as nn
 import torch.nn.functional as F

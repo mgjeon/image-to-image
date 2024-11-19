@@ -1,5 +1,8 @@
-# https://github.com/ermongroup/ddim/blob/main/runners/diffusion.py
-# https://github.com/mirthAI/Fast-DDPM/blob/main/runners/diffusion.py
+""" 
+Adapted from:
+    https://github.com/ermongroup/ddim/blob/main/runners/diffusion.py
+    https://github.com/mirthAI/Fast-DDPM/blob/main/runners/diffusion.py
+"""
 
 import numpy as np
 

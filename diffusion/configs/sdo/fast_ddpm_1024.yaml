@@ -4,24 +4,24 @@ data:
   ext: npy
   image_size: 1024
   train:
-    input_dir: /userhome/jeon_mg/workspace/aia_dataset/train/input
-    target_dir: /userhome/jeon_mg/workspace/aia_dataset/train/target
+    input_dir: /home/mgj/workspace/mgjeon/image-to-image/data/sdo/aia_dataset/train/input
+    target_dir: /home/mgj/workspace/mgjeon/image-to-image/data/sdo/aia_dataset/train/target
     batch_size: 1
     shuffle: true
     num_workers: 4
     pin_memory: true
     drop_last: true
   val:
-    input_dir: /userhome/jeon_mg/workspace/aia_dataset/val/input
-    target_dir: /userhome/jeon_mg/workspace/aia_dataset/val/target
+    input_dir: /home/mgj/workspace/mgjeon/image-to-image/data/sdo/aia_dataset/val/input
+    target_dir: /home/mgj/workspace/mgjeon/image-to-image/data/sdo/aia_dataset/val/target
     batch_size: 1
     shuffle: false
     num_workers: 0
     pin_memory: false
     drop_last: false
   test:
-    input_dir: /userhome/jeon_mg/workspace/aia_dataset/test/input
-    target_dir: /userhome/jeon_mg/workspace/aia_dataset/test/target
+    input_dir: /home/mgj/workspace/mgjeon/image-to-image/data/sdo/aia_dataset/test/input
+    target_dir: /home/mgj/workspace/mgjeon/image-to-image/data/sdo/aia_dataset/test/target
     batch_size: 1
     shuffle: false
     num_workers: 0
@@ -29,11 +29,18 @@ data:
     drop_last: false
 
 model:
-  name: simple2
+  name: ddim_unet
   args:
     input_nc: 3     # channel of input image (condition)
     output_nc: 1    # channel of target image = channel of noise
-    n_feat: 256
+    ch: 16
+    ch_mult: [1, 1, 2, 2, 4, 4]
+    num_res_blocks: 2
+    attn_resolutions: [16, ]
+    dropout: 0.0
+    resamp_with_conv: True
+    resolution: 1024
+    num_groups: 4
 
 params:
   model:
@@ -59,10 +66,9 @@ params:
   #   clip: True
   #   max_norm: 1.0
   loss:
-    name: L1Loss
+    name: MSELoss
     args:
-      reduction: sum
-      average_over_batch: True
+      reduction: mean
   num_epochs: 50
   log_per_iteration: 50
   save_img_per_epoch: 1
@@ -71,8 +77,8 @@ params:
   seed: 42
   float32_matmul_precision: "high"
   accelerator: "cuda"
-  devices: [3]
+  devices: [0]
   precision: "32-true"
   strategy: "ddp"
-  output_dir: /userhome/jeon_mg/workspace/results/sdo/diffusion/fast_ddpm_simple
+  output_dir: /home/mgj/workspace/mgjeon/image-to-image/results/sdo/diffusion/fast_ddpm
   resume_from: null

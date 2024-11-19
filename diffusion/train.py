@@ -14,10 +14,11 @@ from torch.utils.tensorboard import SummaryWriter
 
 from pipeline import AlignedDataset
 from networks import define_model
-from loss import Loss
+from loss import define_loss
+from ema import EMAHelper
 from noise_schedule import get_beta_schedule
 from sampling import sample_image
-from ema import EMAHelper
+
 
 # Get next version =============================================================
 def get_next_version(output_dir):
@@ -39,6 +40,7 @@ if __name__ == "__main__":
         cfg = yaml.safe_load(file)
         data = cfg['data']
         params = cfg['params']
+        model_cfg = cfg['model']
         if args.resume_from is not None:
             cfg['params']['resume_from'] = args.resume_from
         if args.num_epochs is not None:
@@ -46,13 +48,6 @@ if __name__ == "__main__":
 
 # Set process name =============================================================
     setproctitle(cfg["name"])
-
-# Set device ===================================================================
-    assert isinstance(params['devices'], list)
-    devices = ",".join(map(str, params['devices'])) if len(params['devices']) > 1 else str(params['devices'][0])
-    print(f"Using devices: {devices}")
-    os.environ['CUDA_VISIBLE_DEVICES'] = devices
-    device = torch.device(params['accelerator'])
 
 # Create output directory ======================================================
     output_dir = Path(params['output_dir'])
@@ -62,6 +57,11 @@ if __name__ == "__main__":
     log_dir = log_root / f"version_{version}"
     log_dir.mkdir(parents=True, exist_ok=True)
 
+    output_image_train_dir = log_dir / "images" / "train"
+    output_image_val_dir = log_dir / "images" / "val"
+    output_image_train_dir.mkdir(parents=True, exist_ok=True)
+    output_image_val_dir.mkdir(parents=True, exist_ok=True)
+
 # Tensorboard ==================================================================
     writer = SummaryWriter(log_dir)
 
@@ -70,27 +70,20 @@ if __name__ == "__main__":
     logger.setLevel(logging.INFO)
     logger.addHandler(logging.FileHandler(log_dir / "log.log"))
 
+# Save config ==================================================================
+    with open(log_dir / "hparams.yaml", "w") as file:
+        yaml.dump(cfg, file)
+
+    output_model_dir = log_dir / "checkpoints"
+    output_model_dir.mkdir(parents=True, exist_ok=True)
+
+    with open(output_model_dir / "config.yaml", "w") as file:
+        yaml.dump(model_cfg, file)
+
 # Seed =========================================================================
     torch.manual_seed(params['seed'])
     torch.set_float32_matmul_precision(params['float32_matmul_precision'])
 
-# Model ========================================================================
-    model = define_model(cfg["model"])
-    if torch.cuda.device_count() > 1:
-        model = torch.nn.DataParallel(model)
-        cfg['params']['strategy'] = "dp"
-    model = model.to(device)
-
-# Optimizer ====================================================================
-    if params['optimizer']['name'] == "Adam":
-        args = params['optimizer']['args']
-        optimizer = optim.Adam(model.parameters(), lr=args['lr'], betas=args['betas'])
-    else:
-        raise NotImplementedError("Optimizer not implemented")
-
-# Loss =========================================================================
-    criterion = Loss(cfg)
-    
 # Dataset, DataLoader ==========================================================
     train_dataset = AlignedDataset(
         input_dir=data['train']['input_dir'], 
@@ -122,27 +115,32 @@ if __name__ == "__main__":
         drop_last=data['val']['drop_last']
     )
 
-# Save config ==================================================================
-    with open(log_dir / "hparams.yaml", "w") as file:
-        yaml.dump(cfg, file)
+# Set device ===================================================================
+    assert isinstance(params['devices'], list)
+    devices = ",".join(map(str, params['devices'])) if len(params['devices']) > 1 else str(params['devices'][0])
+    print(f"Using devices: {devices}")
+    os.environ['CUDA_VISIBLE_DEVICES'] = devices
+    device = torch.device(params['accelerator'])
 
-# Setup Training ===============================================================
-    # output_image_dir = output_dir / "images" / f"version_{version}"
-    # output_image_train_dir = output_image_dir / "train"
-    # output_image_val_dir = output_image_dir / "val"
-    # output_image_train_dir.mkdir(parents=True, exist_ok=True)
-    # output_image_val_dir.mkdir(parents=True, exist_ok=True)
-    output_image_train_dir = log_dir / "images" / "train"
-    output_image_val_dir = log_dir / "images" / "val"
-    output_image_train_dir.mkdir(parents=True, exist_ok=True)
-    output_image_val_dir.mkdir(parents=True, exist_ok=True)
+# Model ========================================================================
+    model = define_model(model_cfg)
+    logger.info(f"# of parameters of Model: {sum(p.numel() for p in model.parameters())}")
+    if torch.cuda.device_count() > 1:
+        model = torch.nn.DataParallel(model)
+        cfg['params']['strategy'] = "dp"
+    model = model.to(device)
 
-    output_model_dir = log_dir / "checkpoints"
-    output_model_dir.mkdir(parents=True, exist_ok=True)
+# Optimizer ====================================================================
+    if params['optimizer']['name'] == "Adam":
+        args = params['optimizer']['args']
+        optimizer = optim.Adam(model.parameters(), lr=args['lr'], betas=args['betas'])
+    else:
+        raise NotImplementedError("Optimizer not implemented")
 
-    with open(output_model_dir / "config.yaml", "w") as file:
-        yaml.dump(cfg["model"], file)
+# Loss =========================================================================
+    criterion = define_loss(cfg)
 
+# Resume from checkpoint =======================================================
     if params['resume_from'] is not None:
         checkpoint = torch.load(params['resume_from'], map_location=device)
         start_epoch = checkpoint['epoch'] + 1
@@ -159,6 +157,13 @@ if __name__ == "__main__":
         start_iteration = 0
         print("Starting from scratch")
 
+# Model EMA ====================================================================
+    if params['ema']['active']:
+        ema_helper = EMAHelper(mu=params['ema']['rate'])
+        ema_helper.register(model)
+    else:
+        ema_helper = None
+
 # Diffusion Beta Schedule ======================================================
     num_timesteps = params['diffusion']['num_timesteps']
     betas = get_beta_schedule(
@@ -170,18 +175,21 @@ if __name__ == "__main__":
     betas = torch.from_numpy(betas).float().to(device)
     alphas = (1-betas).cumprod(dim=0)
 
-# Model EMA ====================================================================
-    if params['model']['ema']:
-        ema_helper = EMAHelper(mu=params['model']['ema_rate'])
-        ema_helper.register(model)
-    else:
-        ema_helper = None
+# Fast DDPM ====================================================================
+    fast_ddpm = params['diffusion']['fast_ddpm']
+    if fast_ddpm:
+        skip = num_timesteps // params['sampling']['timesteps']
+        print(f"Using Fast-DDPM with skip {skip} over {num_timesteps} timesteps")
 
 # Fixed Initial Noise ==========================================================
+    try:
+        out_channels = cfg['model']['args']['output_nc']
+    except:
+        out_channels = cfg['model']['args']['out_channels']
     if params['sampling']['fixed_initial_noise']:
         initial_noise = torch.randn(
             1,
-            cfg['model']['args']['output_nc'],
+            out_channels,
             data['image_size'],
             data['image_size'],
             device=device
@@ -190,14 +198,8 @@ if __name__ == "__main__":
     else:
         initial_noise = None
 
-# Fast DDPM ====================================================================
-    fast_ddpm = params['diffusion']['fast_ddpm']
-    if fast_ddpm:
-        skip = num_timesteps // params['sampling']['timesteps']
-        print(f"Using Fast-DDPM with skip {skip} over {num_timesteps} timesteps")
-
 # Start Training ===============================================================
-    # logger.info(f"Output directory: {output_dir.resolve()}")
+    logger.info(f"Output directory: {output_dir.resolve()}")
     start_time = perf_counter()
 
     iter_per_epoch = len(train_loader)
@@ -249,26 +251,48 @@ if __name__ == "__main__":
             a = alphas.index_select(dim=0, index=t).view(-1, 1, 1, 1)
             xt = real_targets*a.sqrt() + e*(1.0 - a).sqrt()
 
+# Prediction & Loss ============================================================
+            if params['pred'] == 'noise':
 # Predict Noise from Input and Noisy Target ===================================
-            pred_e = model(torch.cat([inputs, xt], dim=1), t.float())
-
-# Calculate Loss ===============================================================
-            loss = criterion(e, pred_e)
-
-# Train Model==== ============================================================== 
+                pred_e = model(torch.cat([inputs, xt], dim=1), t.float())
+                loss = criterion(
+                    true_noise=e, 
+                    pred_noise=pred_e
+                )
+            
+            elif params['pred'] == 'x0':
+# Predict x0 from Input and Noisy Target ======================================
+                pred_e = model(torch.cat([inputs, xt], dim=1), t.float())
+                pred_x0 = (xt - pred_e*(1.0 - a).sqrt()) / a.sqrt()
+                loss = criterion(
+                    true_x0=real_targets, 
+                    pred_x0=pred_x0
+                )
+            
+            elif params['pred'] == 'both':
+                pred_e = model(torch.cat([inputs, xt], dim=1), t.float())
+                pred_x0 = (xt - pred_e*(1.0 - a).sqrt()) / a.sqrt()
+                loss = criterion(
+                    true_noise=e,
+                    pred_noise=pred_e,
+                    true_x0=real_targets,
+                    pred_x0=pred_x0
+                )
+                
+# Train Model ================================================================== 
             optimizer.zero_grad()
             loss.backward()
 
-            # if params['grad_clip']['clip']:
-            #     torch.nn.utils.clip_grad_norm_(
-            #         parameters=model.parameters(),
-            #         max_norm=params['grad_clip']['max_norm']
-            #     )
+            if params['grad_clip']['clip']:
+                torch.nn.utils.clip_grad_norm_(
+                    parameters=model.parameters(),
+                    max_norm=params['grad_clip']['max_norm']
+                )
         
             optimizer.step()
 
 # Update EMA ===================================================================
-            if params['model']['ema']:
+            if ema_helper is not None:
                 ema_helper.update(model)
 
 # Log Loss =====================================================================
@@ -302,6 +326,7 @@ if __name__ == "__main__":
 # Log to tensorboard, file ====================================================
         loss_avg = sum(losses) / len(losses)
         writer.add_scalar("loss_epoch", loss_avg, iteration-1)
+        logger.info(f"Epoch {epoch}: loss={loss_avg}")
         
 # Save images ==================================================================
         if epoch % params['save_img_per_epoch'] == 0 or epoch == params['num_epochs'] - 1:
@@ -338,6 +363,7 @@ if __name__ == "__main__":
                     break
                 val_fig = val_dataset.create_figure(inputs[0], real_targets[0], fake_targets[0])
                 writer.add_figure("val", val_fig, iteration-1)
+            model.train()
 
 # Save model ===================================================================
         if epoch % params['save_state_per_epoch'] == 0 or epoch == params['num_epochs'] - 1:

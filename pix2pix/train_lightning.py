@@ -51,12 +51,6 @@ class Pix2Pix(L.LightningModule):
                 ext=self.cfg['data']['ext'],
             )
 
-        # output_image_dir = self.output_dir / "images" / f"version_{self.loggers[0].version}"
-        # self.output_image_train_dir = output_image_dir / "train"
-        # self.output_image_val_dir = output_image_dir / "val"
-        # self.output_image_train_dir.mkdir(parents=True, exist_ok=True)
-        # self.output_image_val_dir.mkdir(parents=True, exist_ok=True)
-
 # DataLoader ======================================================================
     def train_dataloader(self):
         return DataLoader(
@@ -214,6 +208,8 @@ if __name__ == "__main__":
         trainer.fit(model, ckpt_path=cfg['params']['resume_from'])
     else:
         trainer.fit(model)
+
+# End Training ==================================================================
     end_time = perf_counter()
     with open(Path(trainer.log_dir) / 'log.log', 'w') as file:
         file.write(f"Training time: {end_time-start_time} seconds")

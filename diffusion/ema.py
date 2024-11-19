@@ -1,4 +1,7 @@
-# https://github.com/ermongroup/ddim/blob/main/models/ema.py
+""" 
+Adapted from:
+    https://github.com/ermongroup/ddim/blob/main/models/ema.py
+"""
 
 import torch.nn as nn
 

@@ -1,4 +1,7 @@
-# https://github.com/ermongroup/ddim/blob/main/models/diffusion.py
+""" 
+Adapted from:
+    https://github.com/ermongroup/ddim/blob/main/models/diffusion.py
+"""
 
 import math
 import torch
@@ -31,8 +34,8 @@ def nonlinearity(x):
     return x*torch.sigmoid(x)
 
 
-def Normalize(in_channels):
-    return torch.nn.GroupNorm(num_groups=32, num_channels=in_channels, eps=1e-6, affine=True)
+def Normalize(in_channels, num_groups):
+    return torch.nn.GroupNorm(num_groups=num_groups, num_channels=in_channels, eps=1e-6, affine=True)
 
 
 class Upsample(nn.Module):
@@ -77,7 +80,7 @@ class Downsample(nn.Module):
 
 
 class ResnetBlock(nn.Module):
-    def __init__(self, *, in_channels, out_channels=None, conv_shortcut=False,
+    def __init__(self, *, in_channels, out_channels=None, conv_shortcut=False, num_groups=32,
                  dropout, temb_channels=512):
         super().__init__()
         self.in_channels = in_channels
@@ -85,7 +88,7 @@ class ResnetBlock(nn.Module):
         self.out_channels = out_channels
         self.use_conv_shortcut = conv_shortcut
 
-        self.norm1 = Normalize(in_channels)
+        self.norm1 = Normalize(in_channels, num_groups)
         self.conv1 = torch.nn.Conv2d(in_channels,
                                      out_channels,
                                      kernel_size=3,
@@ -93,7 +96,7 @@ class ResnetBlock(nn.Module):
                                      padding=1)
         self.temb_proj = torch.nn.Linear(temb_channels,
                                          out_channels)
-        self.norm2 = Normalize(out_channels)
+        self.norm2 = Normalize(out_channels, num_groups)
         self.dropout = torch.nn.Dropout(dropout)
         self.conv2 = torch.nn.Conv2d(out_channels,
                                      out_channels,
@@ -137,11 +140,11 @@ class ResnetBlock(nn.Module):
 
 
 class AttnBlock(nn.Module):
-    def __init__(self, in_channels):
+    def __init__(self, in_channels, num_groups=32):
         super().__init__()
         self.in_channels = in_channels
 
-        self.norm = Normalize(in_channels)
+        self.norm = Normalize(in_channels, num_groups)
         self.q = torch.nn.Conv2d(in_channels,
                                  in_channels,
                                  kernel_size=1,
@@ -203,6 +206,7 @@ class Model(nn.Module):
             dropout,
             resamp_with_conv,
             resolution,       # image size
+            num_groups,
             # num_timesteps,    # number of diffusion timesteps
         ):
         super().__init__()
@@ -257,10 +261,11 @@ class Model(nn.Module):
                 block.append(ResnetBlock(in_channels=block_in,
                                          out_channels=block_out,
                                          temb_channels=self.temb_ch,
-                                         dropout=dropout))
+                                         dropout=dropout,
+                                         num_groups=num_groups))
                 block_in = block_out
                 if curr_res in attn_resolutions:
-                    attn.append(AttnBlock(block_in))
+                    attn.append(AttnBlock(block_in, num_groups=num_groups))
             down = nn.Module()
             down.block = block
             down.attn = attn
@@ -274,12 +279,14 @@ class Model(nn.Module):
         self.mid.block_1 = ResnetBlock(in_channels=block_in,
                                        out_channels=block_in,
                                        temb_channels=self.temb_ch,
-                                       dropout=dropout)
-        self.mid.attn_1 = AttnBlock(block_in)
+                                       dropout=dropout,
+                                       num_groups=num_groups)
+        self.mid.attn_1 = AttnBlock(block_in, num_groups=num_groups)
         self.mid.block_2 = ResnetBlock(in_channels=block_in,
                                        out_channels=block_in,
                                        temb_channels=self.temb_ch,
-                                       dropout=dropout)
+                                       dropout=dropout,
+                                       num_groups=num_groups)
 
         # upsampling
         self.up = nn.ModuleList()
@@ -294,10 +301,11 @@ class Model(nn.Module):
                 block.append(ResnetBlock(in_channels=block_in+skip_in,
                                          out_channels=block_out,
                                          temb_channels=self.temb_ch,
-                                         dropout=dropout))
+                                         dropout=dropout,
+                                         num_groups=num_groups))
                 block_in = block_out
                 if curr_res in attn_resolutions:
-                    attn.append(AttnBlock(block_in))
+                    attn.append(AttnBlock(block_in, num_groups=num_groups))
             up = nn.Module()
             up.block = block
             up.attn = attn
@@ -307,7 +315,7 @@ class Model(nn.Module):
             self.up.insert(0, up)  # prepend to get consistent order
 
         # end
-        self.norm_out = Normalize(block_in)
+        self.norm_out = Normalize(block_in, num_groups)
         self.conv_out = torch.nn.Conv2d(block_in,
                                         output_nc,
                                         kernel_size=3,

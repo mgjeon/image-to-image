@@ -15,11 +15,8 @@ from torchmetrics import MeanAbsoluteError
 from torchmetrics.regression import PearsonCorrCoef
 from torchmetrics.image import PeakSignalNoiseRatio, StructuralSimilarityIndexMeasure
 
+from networks import define_G
 from pipeline import AlignedDataset
-from networks import define_model
-from sampling import sample_image
-
-torch.random.manual_seed(0)
 
 # Get next version ===============================================================
 def get_next_version(output_dir):
@@ -30,7 +27,7 @@ def get_next_version(output_dir):
 
 
 # Metrics ========================================================================
-def calculate_metrics(model, cfg, initial_noise, dataset, loader, device, log_dir, output_dir, args, stage="Validation"):
+def calculate_metrics(model, dataset, loader, device, log_dir, output_dir, args, stage="Validation"):
     binning = args.binning
     subsample = args.subsample
     model.eval()
@@ -54,21 +51,14 @@ def calculate_metrics(model, cfg, initial_noise, dataset, loader, device, log_di
         for i, (inputs, real_target, _, target_name) in enumerate(tqdm(loader, desc=stage)):
             inputs = inputs.to(device)
             real_target = real_target.to(device)
-            fake_target = sample_image(
-                config=cfg,
-                model=model,
-                input_image=inputs,
-                initial_noise=initial_noise,
-                device=device,
-                create_list=False
-            )
+            fake_target = model(inputs)
             if i == 0:
                 fig = dataset.create_figure(inputs[0], real_target[0], fake_target[0])
                 fig.savefig(log_dir / f"{stage}_example.png")
                 print(inputs.shape)
                 print(real_target.shape)
                 print(fake_target.shape)
-
+            
             dataset.save_image(fake_target[0], output_dir / f"{target_name[0]}_fake.png")
             dataset.save_image(real_target[0], output_dir / f"{target_name[0]}_real.png")
             
@@ -91,12 +81,11 @@ def calculate_metrics(model, cfg, initial_noise, dataset, loader, device, log_di
             real_target_binning = avgpool2d(real_target)
             fake_target_binning = avgpool2d(fake_target)
             if i == 0:
-                fig = val_dataset.create_figure(inputs[0], real_target_binning[0], fake_target_binning[0])
+                fig = dataset.create_figure(inputs[0], real_target_binning[0], fake_target_binning[0])
                 fig.savefig(log_dir / f"{stage}_example_binning.png")
                 print(inputs_binning.shape)
                 print(real_target_binning.shape)
                 print(fake_target_binning.shape)
-            
                 
             mae_value_binning = mae(fake_target_binning, real_target_binning)
             pixel_to_pixel_cc_binning = pearson(fake_target_binning.flatten(), real_target_binning.flatten())
@@ -156,8 +145,6 @@ if __name__ == "__main__":
     parser.add_argument("--device", type=str, default="0")
     parser.add_argument("--binning", type=int, default=4)
     parser.add_argument("--subsample", type=int, default=10)
-    parser.add_argument("--num_timesteps", type=int, default=1000)
-    parser.add_argument("--timesteps", type=int, default=10)
     args = parser.parse_args()
 
     print(f"Using devices: {args.device}")
@@ -171,10 +158,10 @@ if __name__ == "__main__":
         data = cfg['data']
         params = cfg['params']
 
-    model = define_model(cfg["model"])
+    G = define_G(cfg["model"])
     model_pth = torch.load(args.model, map_location=device, weights_only=True)
-    model.load_state_dict(model_pth)
-    model = model.to(device)
+    G.load_state_dict(model_pth)
+    G = G.to(device)
 
     val_dataset = AlignedDataset(
         input_dir=data['val']['input_dir'], 
@@ -218,27 +205,10 @@ if __name__ == "__main__":
     with open(log_dir / "config.yaml", "w") as file:
         yaml.dump(args, file)
 
-    initial_noise = torch.randn(
-            1,
-            cfg['model']['args']['output_nc'],
-            data['image_size'],
-            data['image_size'],
-            device=device
-    )
-    print("Using fixed initial noise")
-
-    cfg['params']['diffusion']['num_timesteps'] = args.num_timesteps
-    cfg['params']['sampling']['timesteps'] = args.timesteps
-
-    logger.info(f"Number of timesteps: {args.num_timesteps}")
-    logger.info(f"Total steps: {len(range(0, args.num_timesteps, args.num_timesteps//args.timesteps))}")
-
     val_dir = log_dir / "val"
     val_dir.mkdir(parents=True, exist_ok=True)
     val_metrics = calculate_metrics(
-        model=model,
-        cfg=cfg,
-        initial_noise=initial_noise,
+        model=G,
         dataset=val_dataset,
         loader=val_loader,
         device=device,
@@ -261,9 +231,7 @@ if __name__ == "__main__":
     test_dir = log_dir / "test"
     test_dir.mkdir(parents=True, exist_ok=True)
     test_metrics = calculate_metrics(
-        model=model,
-        cfg=cfg,
-        initial_noise=initial_noise,
+        model=G,
         dataset=test_dataset,
         loader=test_loader,
         device=device,

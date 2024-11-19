@@ -2,26 +2,26 @@ name: "171_304 to 193 (Fast-DDPM)"
 
 data:
   ext: npy
-  image_size: 256
+  image_size: 1024
   train:
-    input_dir: /userhome/jeon_mg/workspace/aia_dataset_256/train/input
-    target_dir: /userhome/jeon_mg/workspace/aia_dataset_256/train/target
-    batch_size: 2
+    input_dir: /home/mgj/workspace/mgjeon/image-to-image/data/sdo/aia_dataset/train/input
+    target_dir: /home/mgj/workspace/mgjeon/image-to-image/data/sdo/aia_dataset/train/target
+    batch_size: 1
     shuffle: true
-    num_workers: 4
+    num_workers: 0
     pin_memory: true
     drop_last: true
   val:
-    input_dir: /userhome/jeon_mg/workspace/aia_dataset_256/val/input
-    target_dir: /userhome/jeon_mg/workspace/aia_dataset_256/val/target
+    input_dir: /home/mgj/workspace/mgjeon/image-to-image/data/sdo/aia_dataset/val/input
+    target_dir: /home/mgj/workspace/mgjeon/image-to-image/data/sdo/aia_dataset/val/target
     batch_size: 1
     shuffle: false
     num_workers: 0
     pin_memory: false
     drop_last: false
   test:
-    input_dir: /userhome/jeon_mg/workspace/aia_dataset_256/test/input
-    target_dir: /userhome/jeon_mg/workspace/aia_dataset_256/test/target
+    input_dir: /home/mgj/workspace/mgjeon/image-to-image/data/sdo/aia_dataset/test/input
+    target_dir: /home/mgj/workspace/mgjeon/image-to-image/data/sdo/aia_dataset/test/target
     batch_size: 1
     shuffle: false
     num_workers: 0
@@ -29,17 +29,11 @@ data:
     drop_last: false
 
 model:
-  name: ddim_unet
+  name: simple
   args:
     input_nc: 3     # channel of input image (condition)
     output_nc: 1    # channel of target image = channel of noise
-    ch: 128
-    ch_mult: [1, 1, 2, 2, 4, 4]
-    num_res_blocks: 2
-    attn_resolutions: [16, ]
-    dropout: 0.0
-    resamp_with_conv: True
-    resolution: 256
+    n_feat: 32
 
 params:
   model:
@@ -77,8 +71,8 @@ params:
   seed: 42
   float32_matmul_precision: "high"
   accelerator: "cuda"
-  devices: [3]
+  devices: [0]
   precision: "32-true"
   strategy: "ddp"
-  output_dir: /userhome/jeon_mg/workspace/results/sdo/diffusion/fast_ddpm
+  output_dir: /home/mgj/workspace/mgjeon/image-to-image/results/sdo/diffusion/fast_ddpm
   resume_from: null
