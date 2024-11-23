@@ -1,0 +1,85 @@
+name: "171_304 to 193 (Pix2Pix, UNet + PatchGAN)"
+
+data:
+  ext: npy
+  image_size: 1024
+  train:
+    input_dir: /home/mgj/workspace/mgjeon/image-to-image/data/sdo/aia_dataset/train/input
+    target_dir: /home/mgj/workspace/mgjeon/image-to-image/data/sdo/aia_dataset/train/target
+    batch_size: 1
+    shuffle: true
+    num_workers: 4
+    pin_memory: true
+    drop_last: true
+  val:
+    input_dir: /home/mgj/workspace/mgjeon/image-to-image/data/sdo/aia_dataset/val/input
+    target_dir: /home/mgj/workspace/mgjeon/image-to-image/data/sdo/aia_dataset/val/target
+    batch_size: 1
+    shuffle: false
+    num_workers: 0
+    pin_memory: false
+    drop_last: false
+  test:
+    input_dir: /home/mgj/workspace/mgjeon/image-to-image/data/sdo/aia_dataset/test/input
+    target_dir: /home/mgj/workspace/mgjeon/image-to-image/data/sdo/aia_dataset/test/target
+    batch_size: 1
+    shuffle: false
+    num_workers: 0
+    pin_memory: false
+    drop_last: false
+
+model:
+  generator:
+    name: unet
+    args:
+      input_nc: 2
+      output_nc: 1
+      num_downs: 8
+      ngf: 64
+      norm_layer: instance
+      use_dropout: false
+      init_type: normal
+      init_gain: 0.02
+  discriminator:
+    name: patchgan
+    args:
+      input_nc: 3
+      ndf: 64
+      n_layers: 3
+      norm_layer: instance
+      init_type: normal
+      init_gain: 0.02
+
+params:
+  ema:
+    active: True
+    rate: 0.999
+  optimizer:
+    name: Adam
+    args:
+      lr: 0.00001
+      betas: [0.5, 0.999]
+  grad_clip:
+    clip: True
+    max_norm: 1.0
+  loss:
+    adversarial:
+      name: BCEWithLogitsLoss
+      args: null
+    reconstruction:
+      name: L1Loss
+      args:
+        lambdaL1: 100
+  num_epochs: 50
+  log_per_iteration: 50
+  save_img_per_epoch: 1
+  save_state_per_epoch: 1
+  save_top_k: -1
+  seed: 42
+  float32_matmul_precision: "high"
+  accelerator: "cuda"
+  devices: [0]
+  precision: "32-true"
+  strategy: "ddp"
+  output_dir: /home/mgj/workspace/mgjeon/image-to-image/results/sdo/pix2pix/unet_patchgan_1024
+  resume_from: null

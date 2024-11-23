@@ -1,0 +1,79 @@
+name: "171_304 to 193 (DDPM+UViT, pred_x0)"
+
+data:
+  ext: npz
+  image_size: 1024
+  train:
+    input_dir: /home/mgj/workspace/mgjeon/image-to-image/data/sdo/aia_dataset/train/input
+    target_dir: /home/mgj/workspace/mgjeon/image-to-image/data/sdo/aia_dataset/train/target
+    batch_size: 1
+    shuffle: true
+    num_workers: 4
+    pin_memory: true
+    drop_last: true
+  val:
+    input_dir: /home/mgj/workspace/mgjeon/image-to-image/data/sdo/aia_dataset/val/input
+    target_dir: /home/mgj/workspace/mgjeon/image-to-image/data/sdo/aia_dataset/val/target
+    batch_size: 1
+    shuffle: true
+    num_workers: 0
+    pin_memory: false
+    drop_last: false
+  test:
+    input_dir: /home/mgj/workspace/mgjeon/image-to-image/data/sdo/aia_dataset/test/input
+    target_dir: /home/mgj/workspace/mgjeon/image-to-image/data/sdo/aia_dataset/test/target
+    batch_size: 1
+    shuffle: false
+    num_workers: 0
+    pin_memory: false
+    drop_last: false
+
+model:
+  name: UViT
+  args:
+    img_size: 1024
+    in_chans: 3     # channel of input+noise image
+    out_chans: 1    # channel of target image = channel of noise
+
+params:
+  pred: 'x0'
+  ema:
+    active: True
+    rate: 0.999
+  diffusion:  
+    beta_schedule: linear
+    beta_start: 0.0001
+    beta_end: 0.02
+    num_timesteps: 1000
+    fast_ddpm: False
+    clip_noise: True
+  sampling:
+    fixed_initial_noise: True
+    out_channels: 1
+    eta: 0.0
+    timesteps: 10        # skip = num_time_steps // timesteps
+  optimizer:
+    name: Adam
+    args:
+      lr: 0.00001
+      betas: [0.5, 0.999]
+  grad_clip:
+    clip: True
+    max_norm: 1.0
+  loss:
+    name: MSELoss
+    args:
+      reduction: mean
+  num_epochs: 50
+  log_per_iteration: 50
+  save_img_per_epoch: 1
+  save_state_per_epoch: 1
+  save_top_k: -1
+  seed: 42
+  float32_matmul_precision: "high"
+  accelerator: "cuda"
+  devices: [0]
+  precision: "32-true"
+  strategy: "ddp"
+  output_dir: /home/mgj/workspace/mgjeon/image-to-image/results/sdo/diffusion_uvit/ddpm_x0
+  resume_from: null
