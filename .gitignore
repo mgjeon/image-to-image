@@ -9,3 +9,6 @@
 **/*.jpg
 **/*.tar.gz
 **/metrics*/
+**/*.gif
+**/data/sdo/rename.ipynb
+**/data/sdo/scp.sh
