@@ -1,1 +1,1 @@
-python -m img2img.data.sdo.download_sdo --config configs/data/sdo/download_sdo.yaml
+python -m img2img.data.preprocess.sdo.download_sdo --config configs/data/sdo/download_sdo.yaml
