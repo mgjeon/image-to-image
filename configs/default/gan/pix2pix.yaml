@@ -1,4 +1,4 @@
-name: "171_304 to 193 (Pix2PixCC)"
+name: "171_304 to 193 (Pix2Pix)"
 
 data:
   ext: npz
@@ -26,30 +26,33 @@ data:
     target_dir: D:/data/aia_dataset/test/target
     batch_size: 1
     shuffle: false
-    num_workers: 0
+    num_workers: 4
     pin_memory: false
     drop_last: false
+    persistent_workers: true
 
 model:
+  name: gan
   generator:
-    name: pix2pixcc
+    name: unet
     args:
-      input_ch: 2
-      target_ch: 1
-      n_gf: 64
-      n_downsample: 3
-      n_residual: 5
-      norm_type: InstanceNorm2d
-      padding_type: 'reflection'
-      trans_conv: True
+      input_nc: 2
+      output_nc: 1
+      num_downs: 6
+      ngf: 64
+      norm_layer: instance
+      use_dropout: false
+      init_type: normal
+      init_gain: 0.02
   discriminator:
-    name: pix2pixcc
+    name: patchgan
     args:
-      input_ch: 2
-      target_ch: 1
-      n_df: 64
-      ch_balance: 1
-      n_D: 2
+      input_nc: 3
+      ndf: 64
+      n_layers: 3
+      norm_layer: instance
+      init_type: normal
+      init_gain: 0.02
 
 params:
   ema:
@@ -64,24 +67,23 @@ params:
     clip: True
     max_norm: 1.0
   loss:
-    name: pix2pixcc
-    criterion:
-      name: MSELoss
+    name: pix2pix
+    adversarial:
+      name: BCEWithLogitsLoss
       args: null
-    FMcriterion:
+    reconstruction:
       name: L1Loss
       args:
-        lambda_FM: 10
+        lambdaL1: 100
   num_epochs: 3
-  log_per_iteration: 50
+  log_per_iteration: 100
   save_img_per_epoch: 1
-  save_state_per_epoch: 1
-  save_top_k: -1
+  save_top_k: 1
   seed: 42
-  float32_matmul_precision: "medium"
-  accelerator: "cuda"
+  float32_matmul_precision: medium
+  accelerator: cuda
   devices: [0]
-  precision: "16-mixed"
-  strategy: "ddp"
-  output_dir: D:/results/sdo/pix2pixcc/default
+  precision: 16-mixed
+  strategy: ddp
+  output_dir: D:/results/sdo/gan/pix2pix/default
   resume_from: null

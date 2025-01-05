@@ -15,7 +15,7 @@ from torchmetrics import MeanAbsoluteError
 from torchmetrics.regression import PearsonCorrCoef
 from torchmetrics.image import PeakSignalNoiseRatio, StructuralSimilarityIndexMeasure
 
-from img2img.dataset import AlignedDataset
+from img2img.data.dataset import AlignedDataset
 from img2img.networks.gan import define_G, define_D
 from img2img.utils.ema import EMAHelper
 

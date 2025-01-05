@@ -15,12 +15,12 @@ from torchmetrics import MeanAbsoluteError
 from torchmetrics.regression import PearsonCorrCoef
 from torchmetrics.image import PeakSignalNoiseRatio, StructuralSimilarityIndexMeasure
 
-from img2img.dataset import AlignedDataset
-from networks import define_model
-from loss import define_loss
-from ema import EMAHelper
-from noise_schedule import get_beta_schedule
-from sampling import sample_image
+from img2img.data.dataset import AlignedDataset
+from img2img.networks.diffusion import define_model
+from img2img.loss.diffusion import define_loss
+from img2img.utils.ema import EMAHelper
+from img2img.utils.diffusion.noise_schedule import get_beta_schedule
+from img2img.utils.diffusion.sampling import sample_image
 
 
 # Get next version =============================================================
@@ -201,8 +201,8 @@ if __name__ == "__main__":
 
 # Metrics ======================================================================
     mae = MeanAbsoluteError().to(device)
-    psnr = PeakSignalNoiseRatio().to(device)
-    ssim = StructuralSimilarityIndexMeasure().to(device)
+    psnr = PeakSignalNoiseRatio(data_range=2.0).to(device)
+    ssim = StructuralSimilarityIndexMeasure(data_range=2.0).to(device)
     pearson = PearsonCorrCoef().to(device)
 
 # Start Training ===============================================================

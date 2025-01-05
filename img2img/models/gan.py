@@ -49,10 +49,10 @@ class GAN(L.LightningModule):
             self.ema = None
 
 # Metrics =========================================================================
-        self.train_mae = MeanAbsoluteError()
-        self.train_pcc = PearsonCorrCoef()
-        self.train_psnr = PeakSignalNoiseRatio(data_range=2.0)
-        self.train_ssim = StructuralSimilarityIndexMeasure(data_range=2.0)
+        # self.train_mae = MeanAbsoluteError()
+        # self.train_pcc = PearsonCorrCoef()
+        # self.train_psnr = PeakSignalNoiseRatio(data_range=2.0)
+        # self.train_ssim = StructuralSimilarityIndexMeasure(data_range=2.0)
 
         self.val_mae = MeanAbsoluteError()
         self.val_pcc = PearsonCorrCoef()
@@ -64,12 +64,6 @@ class GAN(L.LightningModule):
         self.test_psnr = PeakSignalNoiseRatio(data_range=2.0)
         self.test_ssim = StructuralSimilarityIndexMeasure(data_range=2.0)
 
-        # if self.ema is not None:
-        #     self.train_mae_ema = MeanAbsoluteError()
-        #     self.train_pcc_ema = PearsonCorrCoef()
-        #     self.val_mae_ema = MeanAbsoluteError()
-        #     self.val_pcc_ema = PearsonCorrCoef()
-            
 # Dataset =========================================================================
     def setup(self, stage):
         if stage == 'fit':
@@ -93,7 +87,6 @@ class GAN(L.LightningModule):
                 image_size=self.cfg['data']['image_size'],
                 ext=self.cfg['data']['ext'],
             )
-        
 
 # DataLoader ======================================================================
     def train_dataloader(self):
@@ -144,7 +137,7 @@ class GAN(L.LightningModule):
     def on_train_start(self):
         num_params_G = sum(p.numel() for p in self.net_G.parameters())
         num_params_D = sum(p.numel() for p in self.net_D.parameters())
-        with open(Path(self.loggers[0].log_dir) / 'log.log', 'w') as file:
+        with open(Path(self.loggers[0].log_dir) / 'params.log', 'w') as file:
             file.write(f"Number of parameters G: {num_params_G}\n")
             file.write(f"Number of parameters D: {num_params_D}")
 
@@ -181,19 +174,14 @@ class GAN(L.LightningModule):
         self.log_dict({'G_loss_epoch': loss_G, 'D_loss_epoch': loss_D}, on_step=False, on_epoch=True, prog_bar=False, logger=True, sync_dist=True, batch_size=inputs.size(0))
 
 # Log Metrics ====================================================================
-        fake_targets = fake_targets.detach()
-        real_targets = real_targets.detach()
-        fake_targets = torch.clamp(fake_targets, min=-1.0, max=1.0)
-        real_targets = torch.clamp(real_targets, min=-1.0, max=1.0)
-        self.train_mae.update(fake_targets, real_targets)
-        self.train_pcc.update(fake_targets.double().flatten(), real_targets.double().flatten())
-        self.train_psnr.update(fake_targets, real_targets)
-        self.train_ssim.update(fake_targets, real_targets)
-
-        # if self.ema is not None:
-        #     fake_targets = self.ema(inputs)
-        #     self.train_mae_ema.update(fake_targets, real_targets)
-        #     self.train_pcc_ema.update(fake_targets.double().flatten(), real_targets.double().flatten())
+        # fake_targets = fake_targets.detach()
+        # real_targets = real_targets.detach()
+        # fake_targets = torch.clamp(fake_targets, min=-1.0, max=1.0)
+        # real_targets = torch.clamp(real_targets, min=-1.0, max=1.0)
+        # self.train_mae.update(fake_targets, real_targets)
+        # self.train_pcc.update(fake_targets.double().flatten(), real_targets.double().flatten())
+        # self.train_psnr.update(fake_targets, real_targets)
+        # self.train_ssim.update(fake_targets, real_targets)
 
 #==================================================================================
     def on_train_batch_end(self, *args, **kwargs):
@@ -203,21 +191,17 @@ class GAN(L.LightningModule):
 #==================================================================================
     def on_train_epoch_end(self):
         global_step = self.global_step // 2  # self.global_step is the number of optimizer steps taken, in this case 2 steps per iteration because of the multi-optimizer training
-        train_metrics = {
-            'mae/train': self.train_mae.compute(),
-            'pcc/train': self.train_pcc.compute(),
-            'psnr/train': self.train_psnr.compute(),
-            'ssim/train': self.train_ssim.compute(),
-        }
-        self.log_dict(train_metrics, on_step=False, on_epoch=True, prog_bar=False, logger=True, sync_dist=True)
-        self.train_mae.reset()
-        self.train_pcc.reset()
-        self.train_psnr.reset()
-        self.train_ssim.reset()
-        # if self.ema is not None:
-        #     self.log_dict({'mae/train_ema': self.train_mae_ema.compute(), 'pcc/train_ema': self.train_pcc_ema.compute()}, on_step=False, on_epoch=True, prog_bar=False, logger=True, sync_dist=True)
-        #     self.train_mae_ema.reset()
-        #     self.train_pcc_ema.reset()
+        # train_metrics = {
+        #     'mae/train': self.train_mae.compute(),
+        #     'pcc/train': self.train_pcc.compute(),
+        #     'psnr/train': self.train_psnr.compute(),
+        #     'ssim/train': self.train_ssim.compute(),
+        # }
+        # self.log_dict(train_metrics, on_step=False, on_epoch=True, prog_bar=False, logger=True, sync_dist=True)
+        # self.train_mae.reset()
+        # self.train_pcc.reset()
+        # self.train_psnr.reset()
+        # self.train_ssim.reset()
 
 # Save Image ======================================================================
         if self.current_epoch % self.cfg['params']['save_img_per_epoch'] == 0:
@@ -227,61 +211,45 @@ class GAN(L.LightningModule):
             if not output_image_val_dir.exists(): output_image_val_dir.mkdir(parents=True, exist_ok=True)
             self.net_G.eval()
             with torch.no_grad():
-                for inputs, real_target, _, _ in self.train_dataloader():
-                    inputs = inputs.to(self.device)
-                    fake_target = self.net_G(inputs)
-                    self.train_dataset.save_image(fake_target[0], output_image_train_dir/f"{self.current_epoch}_{global_step-1}_fake.png")
-                    self.train_dataset.save_image(real_target[0], output_image_train_dir/f"{self.current_epoch}_{global_step-1}_real.png")
-                    train_fig = self.train_dataset.create_figure(inputs[0], real_target[0], fake_target[0])
+                for inputs, real_targets, _, _ in self.train_dataloader():
+                    inputs = inputs[0].unsqueeze(0).to(self.device)
+                    real_targets = real_targets[0].unsqueeze(0)
+                    fake_targets = self.net_G(inputs)
+                    self.train_dataset.save_image(fake_targets[0], output_image_train_dir/f"{self.current_epoch}_{global_step-1}_fake.png")
+                    self.train_dataset.save_image(real_targets[0], output_image_train_dir/f"{self.current_epoch}_{global_step-1}_real.png")
+                    train_fig = self.train_dataset.create_figure(inputs[0], real_targets[0], fake_targets[0])
                     self.logger.experiment.add_figure('fig/train', train_fig, global_step-1)
-
-                    # fake_target = self.ema(inputs)
-                    # self.train_dataset.save_image(fake_target[0], output_image_train_dir/f"{self.current_epoch}_{global_step-1}_fake_ema.png")
-                    # train_fig = self.train_dataset.create_figure(inputs[0], real_target[0], fake_target[0])
-                    # self.logger.experiment.add_figure('fig/train_ema', train_fig, global_step-1)
                     break
-                for inputs, real_target, _, _ in self.val_dataloader():
-                    inputs = inputs.to(self.device)
-                    fake_target = self.net_G(inputs)
-                    self.val_dataset.save_image(fake_target[0], output_image_val_dir/f"{self.current_epoch}_{global_step-1}_fake.png")
-                    self.val_dataset.save_image(real_target[0], output_image_val_dir/f"{self.current_epoch}_{global_step-1}_real.png")
-                    val_fig = self.val_dataset.create_figure(inputs[0], real_target[0], fake_target[0])
+                for inputs, real_targets, _, _ in self.val_dataloader():
+                    inputs = inputs[0].unsqueeze(0).to(self.device)
+                    real_targets = real_targets[0].unsqueeze(0)
+                    fake_targets = self.net_G(inputs)
+                    self.val_dataset.save_image(fake_targets[0], output_image_val_dir/f"{self.current_epoch}_{global_step-1}_fake.png")
+                    self.val_dataset.save_image(real_targets[0], output_image_val_dir/f"{self.current_epoch}_{global_step-1}_real.png")
+                    val_fig = self.val_dataset.create_figure(inputs[0], real_targets[0], fake_targets[0])
                     self.logger.experiment.add_figure('fig/val', val_fig, global_step-1)
-
-                    # fake_target = self.ema(inputs)
-                    # self.val_dataset.save_image(fake_target[0], output_image_val_dir/f"{self.current_epoch}_{global_step-1}_fake_ema.png")
-                    # val_fig = self.val_dataset.create_figure(inputs[0], real_target[0], fake_target[0])
-                    # self.logger.experiment.add_figure('fig/val_ema', val_fig, global_step-1)
                     break
             self.net_G.train()
-
-# Save Model =======================================================================
-        # if self.current_epoch % self.cfg['params']['save_state_per_epoch'] == 0 or self.current_epoch == self.cfg['params']['num_epochs']-1:
-        #     ckpt_path = Path(self.loggers[0].log_dir)/"checkpoints"
-        #     if not ckpt_path.exists(): ckpt_path.mkdir(parents=True, exist_ok=True)
-        #     torch.save(self.net_G.state_dict(), ckpt_path/f"{self.current_epoch}_{global_step-1}_G.pth")
-        #     torch.save(self.ema.ema_model.state_dict(), ckpt_path/f"{self.current_epoch}_{global_step-1}_G_ema.pth")
 
 # Validation Step ==================================================================
     def validation_step(self, batch, batch_idx):
         inputs, real_targets, _, _ = batch
 
-        loss_G, loss_D, fake_targets = self.criterion(self.net_G, self.net_D, inputs, real_targets)
+        # loss_G, loss_D, fake_targets = self.criterion(self.net_G, self.net_D, inputs, real_targets)
 
-        self.log_dict({'G_loss_val': loss_G, 'D_loss_val': loss_D}, on_step=False, on_epoch=True, prog_bar=False, logger=True, sync_dist=True, batch_size=inputs.size(0))
+        # self.log_dict({'G_loss_val': loss_G, 'D_loss_val': loss_D}, on_step=False, on_epoch=True, prog_bar=False, logger=True, sync_dist=True, batch_size=inputs.size(0))
+
+        fake_targets = self.net_G(inputs)
 
         fake_targets = fake_targets.detach()
         real_targets = real_targets.detach()
         fake_targets = torch.clamp(fake_targets, min=-1.0, max=1.0)
         real_targets = torch.clamp(real_targets, min=-1.0, max=1.0)
+        
         self.val_mae.update(fake_targets, real_targets)
         self.val_pcc.update(fake_targets.double().flatten(), real_targets.double().flatten())
         self.val_psnr.update(fake_targets, real_targets)
         self.val_ssim.update(fake_targets, real_targets)
-        # if self.ema is not None:
-        #     fake_targets = self.ema(inputs)
-        #     self.val_mae_ema.update(fake_targets, real_targets)
-        #     self.val_pcc_ema.update(fake_targets.double().flatten(), real_targets.flatten())
         
     def on_validation_epoch_end(self):
         val_metrics = {
@@ -295,10 +263,6 @@ class GAN(L.LightningModule):
         self.val_pcc.reset()
         self.val_psnr.reset()
         self.val_ssim.reset()
-        # if self.ema is not None:
-        #     self.log_dict({'mae/val_ema': self.val_mae_ema.compute(), 'pcc/val_ema': self.val_pcc_ema.compute()}, on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
-        #     self.val_mae_ema.reset()
-        #     self.val_pcc_ema.reset()
 
 # Test Step =======================================================================
     def test_step(self, batch, batch_idx):

@@ -4,6 +4,7 @@ from pathlib import Path
 from time import perf_counter
 import yaml
 import torch
+from setproctitle import setproctitle
 
 import lightning as L
 from lightning.pytorch.callbacks import ModelCheckpoint
@@ -24,14 +25,18 @@ if __name__ == "__main__":
         if args.num_epochs is not None:
             cfg['params']['num_epochs'] = args.num_epochs
 
+    setproctitle(cfg["name"])
 # Seed =========================================================================
     L.seed_everything(cfg['params']['seed'])
     torch.set_float32_matmul_precision(cfg['params']['float32_matmul_precision'])
 
 # Model =========================================================================
     if cfg['model']['name'] == 'gan':
-        from img2img.model.gan import GAN
+        from img2img.models import GAN
         model = GAN(cfg)
+    elif cfg['model']['name'] == 'diffusion':
+        from img2img.models import Diffusion
+        model = Diffusion(cfg)
     else:
         raise NotImplementedError(f"Model {cfg['model']['name']} not implemented")
 
@@ -40,8 +45,8 @@ if __name__ == "__main__":
         filename='{epoch}',
         save_top_k=cfg['params']['save_top_k'],
         save_last=True,
-        monitor="G_loss_val",
-        mode="min",
+        monitor="pcc/val",
+        mode="max",
     )
 
     tb_logger = TensorBoardLogger(
@@ -82,7 +87,7 @@ if __name__ == "__main__":
 
 # End Training ==================================================================
     end_time = perf_counter()
-    with open(Path(trainer.log_dir) / 'log.log', 'w') as file:
+    with open(Path(trainer.log_dir) / 'time.log', 'w') as file:
         file.write(f"Training time: {end_time-start_time} seconds")
         file.write("\nPyTorch Lightning")
 

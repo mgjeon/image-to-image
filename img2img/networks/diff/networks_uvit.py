@@ -6,7 +6,7 @@ Adapted from:
 import torch
 import torch.nn as nn
 import math
-from timm import trunc_normal_, Mlp
+from .timm import trunc_normal_, Mlp
 import einops
 import torch.utils.checkpoint
 

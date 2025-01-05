@@ -1,13 +1,12 @@
-from img2img.networks.diffusion.networks_ddim import Model
-from img2img.networks.diffusion.networks_simple import NaiveUnet
-from img2img.networks.diffusion.networks_diffusers import DiffusersUNet2DModel
-from img2img.networks.diffusion.networks_uvit import UViT
+from img2img.networks.diff.networks_ddim import Model
+from img2img.networks.diff.networks_simple import NaiveUnet
+from img2img.networks.diff.networks_diffusers import DiffusersUNet2DModel
 
 # =============================================================================
 def define_model(model_cfg):
 
-    name = model_cfg['name']
-    args = model_cfg['args']
+    name = model_cfg['generator']['name']
+    args = model_cfg['generator']['args']
     # num_timesteps = cfg['params']['diffusion']['num_timesteps']
 
     if name == 'ddim_unet':
@@ -35,6 +34,7 @@ def define_model(model_cfg):
             **args
         )
     elif name == 'UViT':
+        from img2img.networks.diff.networks_uvit import UViT
         model = UViT(
             **args
         )

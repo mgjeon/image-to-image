@@ -9,7 +9,7 @@ def compute_alpha(betas, t):
     a = (1 - betas).cumprod(dim=0).index_select(0, t + 1).view(-1, 1, 1, 1)
     return a
 
-def sample_image(*, config, model, input_image, initial_noise=None, device=None, create_list=False):
+def sample_image(*, config, model, input_image, initial_noise=None, device=None, create_list=False, verbose=False):
     if device is None:
         device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     else:
@@ -29,7 +29,7 @@ def sample_image(*, config, model, input_image, initial_noise=None, device=None,
     seq = range(-1, num_timesteps, skip)
     seq = list(seq)
     seq[0] = 0
-    print("timesteps: ", seq)
+    # print("timesteps: ", seq)
     # print(f"Skip Step: {skip}")
     # print(f"Total Steps: {len(seq)}")
 
@@ -40,7 +40,7 @@ def sample_image(*, config, model, input_image, initial_noise=None, device=None,
     if initial_noise is None:
         xt = torch.randn(
             n,
-            config['model']['output_nc'],
+            config['params']['sampling']['out_channels'],
             config['data']['image_size'],
             config['data']['image_size'],
             device=device
@@ -61,7 +61,8 @@ def sample_image(*, config, model, input_image, initial_noise=None, device=None,
     
     model.eval()
     with torch.no_grad():
-        for i, j in zip(tqdm(reversed(seq)), reversed(seq_next)):
+        loader = zip(tqdm(reversed(seq)), reversed(seq_next)) if verbose else zip(reversed(seq), reversed(seq_next))
+        for i, j in loader:
             t = (torch.ones(n) * i).to(device)
             t_next = (torch.ones(n) * j).to(device)
             at = compute_alpha(betas, t.long())

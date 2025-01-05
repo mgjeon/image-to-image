@@ -5,9 +5,9 @@ from pathlib import Path
 # from time import perf_counter
 import yaml
 import torch
+from setproctitle import setproctitle
 
 from torch.utils.data import DataLoader
-import lightning as L
 
 from img2img.networks.gan import define_G
 from img2img.data.dataset import AlignedDataset
@@ -29,6 +29,7 @@ if __name__ == "__main__":
     with open(args.config) as file:
         cfg = yaml.safe_load(file)
 
+    setproctitle(cfg["name"])
 # Find checkpoint ==============================================================
     output_dir = Path(cfg['params']['output_dir'])
     log_root = output_dir / "logs"
@@ -45,12 +46,13 @@ if __name__ == "__main__":
 
 # Model ========================================================================
     # if cfg['model']['name'] == 'gan':
-    #     from img2img.model.gan import GAN
+    #     from img2img.models import GAN
     #     model = GAN(cfg)
     # else:
     #     raise NotImplementedError(f"Model {cfg['model']['name']} not implemented")
     
 # Trainer ======================================================================
+    # import lightning as L
     # trainer = L.Trainer(
     #     accelerator=args.accelerator,
     #     devices=args.device,

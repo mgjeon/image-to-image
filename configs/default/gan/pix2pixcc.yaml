@@ -1,4 +1,4 @@
-name: "171_304 to 193 (Pix2Pix)"
+name: "171_304 to 193 (Pix2PixCC)"
 
 data:
   ext: npz
@@ -32,27 +32,26 @@ data:
     persistent_workers: true
 
 model:
-  name: "gan"
+  name: gan
   generator:
-    name: unet
+    name: pix2pixcc
     args:
-      input_nc: 2
-      output_nc: 1
-      num_downs: 6
-      ngf: 64
-      norm_layer: instance
-      use_dropout: false
-      init_type: normal
-      init_gain: 0.02
+      input_ch: 2
+      target_ch: 1
+      n_gf: 64
+      n_downsample: 3
+      n_residual: 5
+      norm_type: InstanceNorm2d
+      padding_type: 'reflection'
+      trans_conv: True
   discriminator:
-    name: patchgan
+    name: pix2pixcc
     args:
-      input_nc: 3
-      ndf: 64
-      n_layers: 3
-      norm_layer: instance
-      init_type: normal
-      init_gain: 0.02
+      input_ch: 2
+      target_ch: 1
+      n_df: 64
+      ch_balance: 1
+      n_D: 2
 
 params:
   ema:
@@ -67,23 +66,23 @@ params:
     clip: True
     max_norm: 1.0
   loss:
-    name: pix2pix
-    adversarial:
-      name: BCEWithLogitsLoss
+    name: pix2pixcc
+    criterion:
+      name: MSELoss
       args: null
-    reconstruction:
+    FMcriterion:
       name: L1Loss
       args:
-        lambdaL1: 100
+        lambda_FM: 10
   num_epochs: 3
   log_per_iteration: 100
   save_img_per_epoch: 1
   save_top_k: 1
   seed: 42
-  float32_matmul_precision: "medium"
-  accelerator: "cuda"
+  float32_matmul_precision: medium
+  accelerator: cuda
   devices: [0]
-  precision: "16-mixed"
-  strategy: "ddp"
-  output_dir: D:/results/sdo/pix2pix/default
+  precision: 16-mixed
+  strategy: ddp
+  output_dir: D:/results/sdo/gan/pix2pixcc/default
   resume_from: null
