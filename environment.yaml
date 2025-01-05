@@ -13,7 +13,7 @@ dependencies:
   - pytorch
   - torchvision
   - torchaudio
-  - pytorch-cuda=11.8
+  - pytorch-cuda=12.1
   - lightning
   - sunpy
   - setproctitle
@@ -23,3 +23,5 @@ dependencies:
   - tensorboard
   - diffusers
   - aiapy
+  - pip
+    - ema-pytorch

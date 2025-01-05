@@ -1,0 +1,1 @@
+python -m img2img.data.sdo.create_dataset_aia --config configs/data/sdo/create_dataset_aia.yaml

@@ -12,3 +12,4 @@
 **/*.gif
 **/data/sdo/rename.ipynb
 **/data/sdo/scp.sh
+**/*.egg-info/
