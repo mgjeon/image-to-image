@@ -91,7 +91,7 @@ params:
     name: MSELoss
     args:
       reduction: mean
-  num_epochs: 3
+  num_epochs: 100
   log_per_iteration: 100
   save_img_per_epoch: 1
   save_top_k: 1
@@ -101,5 +101,5 @@ params:
   devices: [0]
   precision: 16-mixed
   strategy: ddp
-  output_dir: D:/results/sdo/diffusion/ddpm/noise
+  output_dir: D:/results/sdo/diffusion/fast_ddpm/x0
   resume_from: null

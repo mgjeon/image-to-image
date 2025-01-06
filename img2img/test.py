@@ -20,7 +20,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', type=str, required=True)
     parser.add_argument('--version', type=int, default=-1)
-    parser.add_argument('--resume_epoch', type=int, default=-1)
+    parser.add_argument('--epoch', type=int, default=-1)
     parser.add_argument('--ckpt_name', type=str, default=None)
     parser.add_argument('--accelerator', type=str, default='cuda')
     parser.add_argument('--device', type=list, default=[0])
@@ -39,7 +39,7 @@ if __name__ == "__main__":
     if args.ckpt_name is not None:
         ckpt_name = args.ckpt_name
     else:
-        epoch = get_last_epoch(ckpt_dir) if args.resume_epoch == -1 else args.resume_epoch
+        epoch = get_last_epoch(ckpt_dir) if args.epoch == -1 else args.epoch
         ckpt_name = f"epoch={epoch}.ckpt"
     ckpt_path = ckpt_dir / ckpt_name
     print("Using checkpoint:", ckpt_path)

@@ -67,14 +67,20 @@ params:
     max_norm: 1.0
   loss:
     name: pix2pixcc
-    criterion:
+    LSGANcriterion:
       name: MSELoss
-      args: null
+      args: 
+        lambda_LSGAN: 2.0
     FMcriterion:
       name: L1Loss
       args:
-        lambda_FM: 10
-  num_epochs: 3
+        lambda_FM: 10.0
+    CCcriterion:
+      name: Concordance
+      args:
+        n_CC: 4
+        lambda_CC: 5.0
+  num_epochs: 100
   log_per_iteration: 100
   save_img_per_epoch: 1
   save_top_k: 1
@@ -84,5 +90,5 @@ params:
   devices: [0]
   precision: 16-mixed
   strategy: ddp
-  output_dir: D:/results/sdo/gan/pix2pixcc/default
+  output_dir: D:/results/sdo/gan/pix2pixcc
   resume_from: null
