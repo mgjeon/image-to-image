@@ -219,8 +219,8 @@ class Diffusion(L.LightningModule):
             )
 
 # Log Loss ========================================================================
-        self.log_dict({'G_loss_step': loss}, on_step=True, on_epoch=False, prog_bar=False, logger=True, sync_dist=True, batch_size=inputs.size(0))
-        self.log_dict({'G_loss_epoch': loss}, on_step=False, on_epoch=True, prog_bar=False, logger=True, sync_dist=True, batch_size=inputs.size(0))
+        # self.log_dict({'G_loss_step': loss}, on_step=True, on_epoch=False, prog_bar=False, logger=True, sync_dist=True, batch_size=inputs.size(0))
+        self.log_dict({'train/G_loss': loss}, on_step=False, on_epoch=True, prog_bar=False, logger=True, sync_dist=True, batch_size=inputs.size(0))
 
 # Log Metrics ====================================================================
         # fake_targets = fake_targets.detach()
@@ -276,7 +276,7 @@ class Diffusion(L.LightningModule):
                     self.train_dataset.dataset.save_image(fake_targets[0], output_image_train_dir/f"{self.current_epoch}_{global_step-1}_fake.png")
                     self.train_dataset.dataset.save_image(real_targets[0], output_image_train_dir/f"{self.current_epoch}_{global_step-1}_real.png")
                     train_fig = self.train_dataset.dataset.create_figure(inputs[0], real_targets[0], fake_targets[0])
-                    self.logger.experiment.add_figure('fig/train', train_fig, global_step-1)
+                    self.logger.experiment.add_figure('train/fig', train_fig, global_step-1)
                     break
                 for _, _, _, inputs, real_targets, _, _ in self.val_dataloader():
                     inputs = inputs[0].unsqueeze(0).to(self.device)
@@ -292,17 +292,38 @@ class Diffusion(L.LightningModule):
                     self.val_dataset.dataset.save_image(fake_targets[0], output_image_val_dir/f"{self.current_epoch}_{global_step-1}_fake.png")
                     self.val_dataset.dataset.save_image(real_targets[0], output_image_val_dir/f"{self.current_epoch}_{global_step-1}_real.png")
                     val_fig = self.val_dataset.dataset.create_figure(inputs[0], real_targets[0], fake_targets[0])
-                    self.logger.experiment.add_figure('fig/val', val_fig, global_step-1)
+                    self.logger.experiment.add_figure('val/fig', val_fig, global_step-1)
                     break
             self.model.train()
 
 # Validation Step ==================================================================
     def validation_step(self, batch, batch_idx):
-        _, _, _, inputs, real_targets, _, _ = batch
+        t, e, noisy_targets, cond_inputs, real_targets, _, _ = batch
+        t = t.flatten().float()
+        inputs = torch.cat((cond_inputs, noisy_targets), dim=1)
+        if self.cfg['params']['pred'] == 'noise':
+            # Predict Noise from Input and Noisy Target ========================
+            pred_e = self.model(inputs, t)
+            loss = self.criterion(
+                true_noise=e, 
+                pred_noise=pred_e
+            )
+        
+        elif self.cfg['params']['pred'] == 'x0':
+            # Predict x0 from Input and Noisy Target ===========================
+            pred_x0 = self.model(inputs, t)
+            loss = self.criterion(
+                true_x0=real_targets,
+                pred_x0=pred_x0
+            )
+        
+        self.log_dict({'val/G_loss': loss}, on_step=False, on_epoch=True, prog_bar=False, logger=True, sync_dist=True, batch_size=inputs.size(0))
+
+        # if self.current_epoch % self.cfg['params']['val_metric_per_epoch'] == 0:
         fake_targets = sample_image(
             config=self.cfg,
             model=self.model,
-            input_image=inputs,
+            input_image=cond_inputs,
             initial_noise=None,
             device=self.device,
             create_list=False
@@ -319,13 +340,14 @@ class Diffusion(L.LightningModule):
         self.val_ssim.update(fake_targets, real_targets)
         
     def on_validation_epoch_end(self):
+        # if self.current_epoch % self.cfg['params']['val_metric_per_epoch'] == 0:
         val_metrics = {
-            'mae/val': self.val_mae.compute(),
-            'pcc/val': self.val_pcc.compute(),
-            'psnr/val': self.val_psnr.compute(),
-            'ssim/val': self.val_ssim.compute(),
+            'val/mae': self.val_mae.compute(),
+            'val/pcc': self.val_pcc.compute(),
+            'val/psnr': self.val_psnr.compute(),
+            'val/ssim': self.val_ssim.compute(),
         }
-        self.log_dict(val_metrics, on_step=False, on_epoch=True, prog_bar=True, logger=True)
+        self.log_dict(val_metrics, on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
         self.val_mae.reset()
         self.val_pcc.reset()
         self.val_psnr.reset()

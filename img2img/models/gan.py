@@ -170,8 +170,8 @@ class GAN(L.LightningModule):
         optim_D.step()
 
 # Log Loss ========================================================================
-        self.log_dict({'G_loss_step': loss_G, 'D_loss_step': loss_D}, on_step=True, on_epoch=False, prog_bar=False, logger=True, sync_dist=True, batch_size=inputs.size(0))
-        self.log_dict({'G_loss_epoch': loss_G, 'D_loss_epoch': loss_D}, on_step=False, on_epoch=True, prog_bar=False, logger=True, sync_dist=True, batch_size=inputs.size(0))
+        # self.log_dict({'G_loss_step': loss_G, 'D_loss_step': loss_D}, on_step=True, on_epoch=False, prog_bar=False, logger=True, sync_dist=True, batch_size=inputs.size(0))
+        self.log_dict({'train/G_loss': loss_G, 'train/D_loss': loss_D}, on_step=False, on_epoch=True, prog_bar=False, logger=True, sync_dist=True, batch_size=inputs.size(0))
 
 # Log Metrics ====================================================================
         # fake_targets = fake_targets.detach()
@@ -218,7 +218,7 @@ class GAN(L.LightningModule):
                     self.train_dataset.save_image(fake_targets[0], output_image_train_dir/f"{self.current_epoch}_{global_step-1}_fake.png")
                     self.train_dataset.save_image(real_targets[0], output_image_train_dir/f"{self.current_epoch}_{global_step-1}_real.png")
                     train_fig = self.train_dataset.create_figure(inputs[0], real_targets[0], fake_targets[0])
-                    self.logger.experiment.add_figure('fig/train', train_fig, global_step-1)
+                    self.logger.experiment.add_figure('train/fig', train_fig, global_step-1)
                     break
                 for inputs, real_targets, _, _ in self.val_dataloader():
                     inputs = inputs[0].unsqueeze(0).to(self.device)
@@ -227,7 +227,7 @@ class GAN(L.LightningModule):
                     self.val_dataset.save_image(fake_targets[0], output_image_val_dir/f"{self.current_epoch}_{global_step-1}_fake.png")
                     self.val_dataset.save_image(real_targets[0], output_image_val_dir/f"{self.current_epoch}_{global_step-1}_real.png")
                     val_fig = self.val_dataset.create_figure(inputs[0], real_targets[0], fake_targets[0])
-                    self.logger.experiment.add_figure('fig/val', val_fig, global_step-1)
+                    self.logger.experiment.add_figure('val/fig', val_fig, global_step-1)
                     break
             self.net_G.train()
 
@@ -235,12 +235,12 @@ class GAN(L.LightningModule):
     def validation_step(self, batch, batch_idx):
         inputs, real_targets, _, _ = batch
 
-        # loss_G, loss_D, fake_targets = self.criterion(self.net_G, self.net_D, inputs, real_targets)
+        loss_G, loss_D, fake_targets = self.criterion(self.net_G, self.net_D, inputs, real_targets)
 
-        # self.log_dict({'G_loss_val': loss_G, 'D_loss_val': loss_D}, on_step=False, on_epoch=True, prog_bar=False, logger=True, sync_dist=True, batch_size=inputs.size(0))
+        self.log_dict({'val/G_loss': loss_G, 'val/D_loss': loss_D}, on_step=False, on_epoch=True, prog_bar=False, logger=True, sync_dist=True, batch_size=inputs.size(0))
 
-        fake_targets = self.net_G(inputs)
-
+        # if self.current_epoch % self.cfg['params']['val_metric_per_epoch'] == 0:
+        # fake_targets = self.net_G(inputs)
         fake_targets = fake_targets.detach()
         real_targets = real_targets.detach()
         fake_targets = torch.clamp(fake_targets, min=-1.0, max=1.0)
@@ -252,13 +252,14 @@ class GAN(L.LightningModule):
         self.val_ssim.update(fake_targets, real_targets)
         
     def on_validation_epoch_end(self):
+        # if self.current_epoch % self.cfg['params']['val_metric_per_epoch'] == 0:
         val_metrics = {
-            'mae/val': self.val_mae.compute(),
-            'pcc/val': self.val_pcc.compute(),
-            'psnr/val': self.val_psnr.compute(),
-            'ssim/val': self.val_ssim.compute(),
+            'val/mae': self.val_mae.compute(),
+            'val/pcc': self.val_pcc.compute(),
+            'val/psnr': self.val_psnr.compute(),
+            'val/ssim': self.val_ssim.compute(),
         }
-        self.log_dict(val_metrics, on_step=False, on_epoch=True, prog_bar=True, logger=True)
+        self.log_dict(val_metrics, on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
         self.val_mae.reset()
         self.val_pcc.reset()
         self.val_psnr.reset()

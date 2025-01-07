@@ -42,11 +42,52 @@ if __name__ == "__main__":
 
 # Callback ======================================================================
     checkpoint_callback = ModelCheckpoint(
-        filename='{epoch}',
-        save_top_k=cfg['params']['save_top_k'],
+        filename='epoch={epoch}',
+        auto_insert_metric_name=False,
+        every_n_epochs=cfg['params']['save_state_per_epoch'],
+        save_top_k=-1,
         save_last=True,
-        monitor="pcc/val",
-        mode="max",
+    )
+
+    # checkpoint_callback_val_loss = ModelCheckpoint(
+    #     filename='epoch={epoch}-val_loss={val/G_loss:.2g}',
+    #     auto_insert_metric_name=False,
+    #     monitor='val/G_loss',
+    #     mode='min',
+    #     save_top_k=1,
+    #     save_last=False,
+    # )
+
+    # checkpoint_callback_mae = ModelCheckpoint(
+    #     filename='epoch={epoch}-mae={val/mae:.2g}',
+    #     auto_insert_metric_name=False,
+    #     monitor='val/mae',
+    #     mode='min',
+    #     save_top_k=1,
+    # )
+
+    # checkpoint_callback_pcc = ModelCheckpoint(
+    #     filename='epoch={epoch}-pcc={val/pcc:.2f}',
+    #     auto_insert_metric_name=False,
+    #     monitor='val/pcc',
+    #     mode='max',
+    #     save_top_k=1,
+    # )
+
+    # checkpoint_callback_psnr = ModelCheckpoint(
+    #     filename='epoch={epoch}-psnr={val/psnr:.2f}',
+    #     auto_insert_metric_name=False,
+    #     monitor='val/psnr',
+    #     mode='max',
+    #     save_top_k=1,
+    # )
+
+    checkpoint_callback_ssim = ModelCheckpoint(
+        filename='epoch={epoch}-ssim={val/ssim:.2f}',
+        auto_insert_metric_name=False,
+        monitor='val/ssim',
+        mode='max',
+        save_top_k=1,
     )
 
     tb_logger = TensorBoardLogger(
@@ -57,7 +98,7 @@ if __name__ == "__main__":
 
 # Trainer =======================================================================
     if "ddp" in cfg['params']['strategy']:
-        if len(cfg['params']['devices']) > 1:
+        if len(cfg['params']['devices']) > 1 and cfg['model']['name'] == 'gan':
             strategy = "ddp_find_unused_parameters_true"
             cfg['params']['strategy'] = strategy
         else:
@@ -68,9 +109,17 @@ if __name__ == "__main__":
 
     trainer = L.Trainer(
         default_root_dir=model.output_dir,
-        callbacks=[checkpoint_callback],
+        callbacks=[
+            checkpoint_callback, 
+            # checkpoint_callback_val_loss,
+            # checkpoint_callback_mae,
+            # checkpoint_callback_pcc,
+            # checkpoint_callback_psnr,
+            checkpoint_callback_ssim,
+        ],
         logger=[tb_logger],
-        log_every_n_steps=cfg['params']['log_per_iteration'],
+        # log_every_n_steps=cfg['params']['log_per_iteration'],
+        check_val_every_n_epoch=cfg['params']['val_per_epoch'],
         max_epochs=cfg['params']['num_epochs'],
         accelerator=cfg['params']['accelerator'],
         devices=cfg['params']['devices'],
