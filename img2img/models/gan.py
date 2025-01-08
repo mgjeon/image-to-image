@@ -281,10 +281,10 @@ class GAN(L.LightningModule):
 
     def on_test_epoch_end(self):
         test_metrics = {
-            'mae/test': self.test_mae.compute(),
-            'pcc/test': self.test_pcc.compute(),
-            'psnr/test': self.test_psnr.compute(),
-            'ssim/test': self.test_ssim.compute(),
+            'test/mae': self.test_mae.compute(),
+            'test/pcc': self.test_pcc.compute(),
+            'test/psnr': self.test_psnr.compute(),
+            'test/ssim': self.test_ssim.compute(),
         }
         self.log_dict(test_metrics, on_step=False, on_epoch=True)
         self.test_mae.reset()

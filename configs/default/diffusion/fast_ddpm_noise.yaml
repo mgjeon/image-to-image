@@ -1,4 +1,4 @@
-name: "171_304 to 193 (DDPM, pred_noise)"
+name: "171_304 to 193 (Fast-DDPM, pred_noise)"
 
 data:
   ext: npz
@@ -75,7 +75,7 @@ params:
     fixed_initial_noise: True
     out_channels: 1
     eta: 0.0
-    timesteps: 10        # skip = num_time_steps // timesteps
+    timesteps: 100        # skip = num_time_steps // timesteps
   ema:
     active: True
     rate: 0.999
