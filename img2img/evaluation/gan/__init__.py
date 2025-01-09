@@ -1,1 +1,0 @@
-from .sample import get_fake_target

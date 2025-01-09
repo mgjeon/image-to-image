@@ -28,6 +28,7 @@ if __name__ == "__main__":
     parser.add_argument('--accelerator', type=str, default='cuda')
     parser.add_argument('--device', type=int, default=0)
     parser.add_argument('--save_meta', action='store_true', default=True)
+    parser.add_argument('--use_sunpy_map', action='store_true', default=False)
     args = parser.parse_args()
     with open(args.config) as file:
         cfg = yaml.safe_load(file)
@@ -70,9 +71,13 @@ if __name__ == "__main__":
     # trainer.test(model, ckpt_path=ckpt_path)
 
 # Set device ===================================================================
-    print(f"Using device: {args.device}")
-    os.environ["CUDA_VISIBLE_DEVICES"] = str(args.device)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if args.device == -1:
+        print("Using device: cpu")
+        device = torch.device("cpu")
+    else:
+        print(f"Using device: {args.device}")
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(args.device)
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Load model ===================================================================
     ckpt = torch.load(ckpt_path, weights_only=True, map_location=device)
