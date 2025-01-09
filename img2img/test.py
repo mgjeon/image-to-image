@@ -10,6 +10,7 @@ from setproctitle import setproctitle
 from torch.utils.data import DataLoader
 
 from img2img.networks.gan import define_G
+from img2img.networks.diffusion import define_model
 from img2img.data.dataset import AlignedDataset
 from img2img.evaluation import get_last_epoch, get_last_version
 from img2img.evaluation import calculate_metrics
@@ -20,10 +21,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', type=str, required=True)
     parser.add_argument('--version', type=int, default=-1)
-    parser.add_argument('--epoch', type=int, default=-1)
+    # parser.add_argument('--epoch', type=int, default=-1)
+    parser.add_argument('--output_dir', type=str, default=None)
+    parser.add_argument('--ckpt', type=str, choices=['last', 'best', 'epoch'], default='last')
     parser.add_argument('--ckpt_name', type=str, default=None)
     parser.add_argument('--accelerator', type=str, default='cuda')
-    parser.add_argument('--device', type=list, default=[0])
+    parser.add_argument('--device', type=int, default=0)
     parser.add_argument('--save_meta', action='store_true', default=True)
     args = parser.parse_args()
     with open(args.config) as file:
@@ -31,7 +34,7 @@ if __name__ == "__main__":
 
     setproctitle(cfg["name"])
 # Find checkpoint ==============================================================
-    output_dir = Path(cfg['params']['output_dir'])
+    output_dir = Path(cfg['params']['output_dir']) if args.output_dir is None else Path(args.output_dir)
     log_root = output_dir / "logs"
     version = get_last_version(log_root) if args.version == -1 else args.version
     log_dir = log_root / f"version_{version}"
@@ -39,8 +42,13 @@ if __name__ == "__main__":
     if args.ckpt_name is not None:
         ckpt_name = args.ckpt_name
     else:
-        epoch = get_last_epoch(ckpt_dir) if args.epoch == -1 else args.epoch
-        ckpt_name = f"epoch={epoch}.ckpt"
+        if args.ckpt == 'best':
+            ckpt_name = sorted(ckpt_dir.glob('best*.ckpt'))[0].name
+        elif args.ckpt == 'last':
+            ckpt_name = sorted(ckpt_dir.glob('last.ckpt'))[0].name
+        elif args.ckpt == 'epoch':
+            epoch = get_last_epoch(ckpt_dir) if args.epoch == -1 else args.epoch
+            ckpt_name = f"epoch={epoch}.ckpt"
     ckpt_path = ckpt_dir / ckpt_name
     print("Using checkpoint:", ckpt_path)
 
@@ -62,18 +70,20 @@ if __name__ == "__main__":
     # trainer.test(model, ckpt_path=ckpt_path)
 
 # Set device ===================================================================
-    assert isinstance(cfg['params']['devices'], list)
-    devices = ",".join(map(str, cfg['params']['devices'])) if len(cfg['params']['devices']) > 1 else str(cfg['params']['devices'][0])
-    print(f"Using devices: {devices}")
-    os.environ['CUDA_VISIBLE_DEVICES'] = devices
-    device = torch.device(cfg['params']['accelerator'])
+    print(f"Using device: {args.device}")
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(args.device)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Load model ===================================================================
-    ckpt = torch.load(ckpt_path, weights_only=True)
-    net_G_weights = {k.replace("net_G.",''): v for k, v in ckpt["state_dict"].items() if k.startswith("net_G.")}
-    G = define_G(cfg['model'])
-    G.load_state_dict(net_G_weights)
-    G = G.to(device)
+    ckpt = torch.load(ckpt_path, weights_only=True, map_location=device)
+    if cfg['model']['name'] == 'gan':
+        model = define_G(cfg['model'])
+        model_weights = {k.replace("net_G.",''): v for k, v in ckpt["state_dict"].items() if k.startswith("net_G.")}
+    elif cfg['model']['name'] == 'diffusion':
+        model = define_model(cfg['model'])
+        model_weights = {k.replace("model.model.","model."): v for k, v in ckpt["state_dict"].items() if k.startswith("model.model.")}
+    model.load_state_dict(model_weights)
+    model = model.to(device)
 
     test_dataset = AlignedDataset(
         input_dir=cfg['data']['test']['input_dir'], 
@@ -96,7 +106,8 @@ if __name__ == "__main__":
     csv_dir.mkdir(parents=True, exist_ok=True)
 
     test_metrics = calculate_metrics(
-        model=G,
+        model=model,
+        cfg=cfg,
         dataset=test_dataset,
         loader=test_loader,
         device=device,

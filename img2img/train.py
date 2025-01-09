@@ -83,7 +83,7 @@ if __name__ == "__main__":
     # )
 
     checkpoint_callback_ssim = ModelCheckpoint(
-        filename='epoch={epoch}-ssim={val/ssim:.2f}',
+        filename='best-epoch={epoch}-ssim={val/ssim:.2f}',
         auto_insert_metric_name=False,
         monitor='val/ssim',
         mode='max',

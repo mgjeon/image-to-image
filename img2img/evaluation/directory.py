@@ -6,6 +6,6 @@ def get_last_epoch(checkpoint_dir):
     existing_epochs = [
         int(f.name.split(".")[0].split("=")[1]) 
         for f in checkpoint_dir.glob("*.ckpt") 
-        if f.name.split(".")[0].split("=")[0]=='epoch'
+        if f.name.split(".")[0].split("=")[0]=='epoch' and (not '-' in f.name)
     ]
     return max(existing_epochs)

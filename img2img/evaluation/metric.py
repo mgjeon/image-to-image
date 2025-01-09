@@ -11,7 +11,7 @@ import gc
 
 from img2img.evaluation.gan import get_fake_target
 
-def calculate_metrics(model, dataset, loader, device, out_dir, csv_dir, args, stage):
+def calculate_metrics(model, cfg, dataset, loader, device, out_dir, csv_dir, args, stage):
     model.eval()
     with torch.no_grad():
         mae = MeanAbsoluteError().to(device)                                # 0.0 is best
@@ -27,7 +27,7 @@ def calculate_metrics(model, dataset, loader, device, out_dir, csv_dir, args, st
         for i, (inputs, real_target, _, target_name) in enumerate(tqdm(loader, desc=stage)):
             inputs = inputs.to(device)
             real_target = real_target.to(device)
-            fake_target = get_fake_target(model, inputs)
+            fake_target = get_fake_target(model, cfg, inputs, device)
 
             real_target = torch.clamp(real_target, min=-1.0, max=1.0)
             fake_target = torch.clamp(fake_target, min=-1.0, max=1.0)
