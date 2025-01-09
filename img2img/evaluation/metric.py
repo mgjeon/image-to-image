@@ -24,7 +24,7 @@ def get_mask_within_disk(smap, margin=0):
     return mask
 
 def calculate_metrics(model, cfg, dataset, loader, device, out_dir, csv_dir, args, stage):
-    model.eval()
+    (out_dir/stage).mkdir(parents=True, exist_ok=True)
 
     metrics = {
         'Normalized_All': {'obstime': [], 'MAE': [], 'Pearson CC': [], 'PSNR': [], 'SSIM': []},
@@ -35,6 +35,7 @@ def calculate_metrics(model, cfg, dataset, loader, device, out_dir, csv_dir, arg
         'Denormalized_OutsideDisk': {'obstime': [], 'MAE': [], 'Pearson CC': []},
     }
 
+    model.eval()
     with torch.no_grad():
         for i, (inputs, real_target, _, target_name) in enumerate(tqdm(loader, desc=stage)):
             assert inputs.size(0) == 1
@@ -43,9 +44,9 @@ def calculate_metrics(model, cfg, dataset, loader, device, out_dir, csv_dir, arg
             timestamp = timestamp[:10] + timestamp[10:].replace("-", ":")
 
             if args.save_meta:
-                save_file_path = out_dir / f"{target_name[0]}_fake.npz"
+                save_file_path = out_dir / stage / f"{target_name[0]}_fake.npz"
             else:
-                save_file_path = out_dir / f"{target_name[0]}_fake.npy"
+                save_file_path = out_dir / stage / f"{target_name[0]}_fake.npy"
 
             if not save_file_path.exists():
                 inputs = inputs.to(device)

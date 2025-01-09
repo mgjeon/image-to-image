@@ -3,9 +3,10 @@ name: "171_304 to 193 (Pix2PixHD)"
 data:
   ext: npz
   image_size: 1024
+  dataset_root: /userhome/jeon_mg/workspace/aia_dataset
   train:
-    input_dir: /userhome/jeon_mg/workspace/aia_dataset/train/input
-    target_dir: /userhome/jeon_mg/workspace/aia_dataset/train/target
+    input_dir: train/input
+    target_dir: train/target
     batch_size: 1
     shuffle: true
     num_workers: 4
@@ -13,8 +14,8 @@ data:
     drop_last: true
     persistent_workers: true
   val:
-    input_dir: /userhome/jeon_mg/workspace/aia_dataset/val/input
-    target_dir: /userhome/jeon_mg/workspace/aia_dataset/val/target
+    input_dir: val/input
+    target_dir: val/target
     batch_size: 1
     shuffle: false
     num_workers: 4
@@ -22,8 +23,8 @@ data:
     drop_last: false
     persistent_workers: true
   test:
-    input_dir: /userhome/jeon_mg/workspace/aia_dataset/test/input
-    target_dir: /userhome/jeon_mg/workspace/aia_dataset/test/target
+    input_dir: test/input
+    target_dir: test/target
     batch_size: 1
     shuffle: false
     num_workers: 4

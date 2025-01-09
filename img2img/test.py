@@ -29,6 +29,7 @@ if __name__ == "__main__":
     parser.add_argument('--device', type=int, default=0)
     parser.add_argument('--save_meta', action='store_true', default=True)
     parser.add_argument('--use_sunpy_map', action='store_true', default=False)
+    parser.add_argument('--dataset_root', type=str, default=None)
     args = parser.parse_args()
     with open(args.config) as file:
         cfg = yaml.safe_load(file)
@@ -90,7 +91,10 @@ if __name__ == "__main__":
     model.load_state_dict(model_weights)
     model = model.to(device)
 
+    dataset_root = args.dataset_root if args.dataset_root is not None else cfg['data']['dataset_root']
+
     test_dataset = AlignedDataset(
+        dataset_root = dataset_root,
         input_dir=cfg['data']['test']['input_dir'], 
         target_dir=cfg['data']['test']['target_dir'],
         image_size=cfg['data']['image_size'],

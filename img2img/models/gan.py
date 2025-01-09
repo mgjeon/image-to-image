@@ -68,12 +68,14 @@ class GAN(L.LightningModule):
     def setup(self, stage):
         if stage == 'fit':
             self.train_dataset = AlignedDataset(
+                dataset_root = self.cfg['data']['dataset_root'],
                 input_dir=self.cfg['data']['train']['input_dir'],
                 target_dir=self.cfg['data']['train']['target_dir'],
                 image_size=self.cfg['data']['image_size'],
                 ext=self.cfg['data']['ext'],
             )
             self.val_dataset = AlignedDataset(
+                dataset_root = self.cfg['data']['dataset_root'],
                 input_dir=self.cfg['data']['val']['input_dir'],
                 target_dir=self.cfg['data']['val']['target_dir'],
                 image_size=self.cfg['data']['image_size'],
@@ -82,6 +84,7 @@ class GAN(L.LightningModule):
         
         if stage == 'test':
             self.test_dataset = AlignedDataset(
+                dataset_root = self.cfg['data']['dataset_root'],
                 input_dir=self.cfg['data']['test']['input_dir'],
                 target_dir=self.cfg['data']['test']['target_dir'],
                 image_size=self.cfg['data']['image_size'],

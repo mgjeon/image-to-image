@@ -13,13 +13,15 @@ from albumentations.pytorch import ToTensorV2
 class AlignedDataset(Dataset):
     def __init__(
             self, 
+            dataset_root,
             input_dir,
             target_dir,
             image_size=256,
             ext="jpg",
-    ):
-        self.input_dir = Path(input_dir)
-        self.target_dir = Path(target_dir)
+    ):  
+        dataset_root = Path(dataset_root)
+        self.input_dir = dataset_root / input_dir
+        self.target_dir = dataset_root / target_dir
 
         self.input_files = sorted(self.input_dir.glob("*."+ext))
         self.target_files = sorted(self.target_dir.glob("*."+ext))
