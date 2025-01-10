@@ -50,7 +50,7 @@ def calculate_metrics(model, cfg, dataset, loader, device, out_dir, csv_dir, arg
 
             if not save_file_path.exists():
                 inputs = inputs.to(device)
-                fake_target = get_fake_target(model, cfg, inputs, device)
+                fake_target = get_fake_target(model, cfg, args, inputs, device)
                 fake_target = torch.clamp(fake_target, min=-1.0, max=1.0)
 
                 if args.save_meta:

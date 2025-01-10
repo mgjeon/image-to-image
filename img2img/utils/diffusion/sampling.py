@@ -9,7 +9,7 @@ def compute_alpha(betas, t):
     a = (1 - betas).cumprod(dim=0).index_select(0, t + 1).view(-1, 1, 1, 1)
     return a
 
-def sample_image(*, config, model, input_image, initial_noise=None, device=None, create_list=False, verbose=False):
+def sample_image(*, config, model, input_image, initial_noise=None, device=None, create_list=False, verbose=False, args=None):
     if device is None:
         device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     else:
@@ -17,6 +17,11 @@ def sample_image(*, config, model, input_image, initial_noise=None, device=None,
 
     num_timesteps = config['params']['diffusion']['num_timesteps']
     timesteps = config['params']['sampling'].get('timesteps', num_timesteps)
+
+    if args is not None:
+        if args.timesteps != -1:
+            timesteps = args.timesteps
+            
     betas = get_beta_schedule(
         beta_schedule=config['params']['diffusion']['beta_schedule'],
         beta_start=config['params']['diffusion']['beta_start'],

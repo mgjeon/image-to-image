@@ -30,6 +30,7 @@ if __name__ == "__main__":
     parser.add_argument('--save_meta', action='store_true', default=True)
     parser.add_argument('--use_sunpy_map', action='store_true', default=False)
     parser.add_argument('--dataset_root', type=str, default=None)
+    parser.add_argument('--timesteps', type=int, default=-1)
     args = parser.parse_args()
     with open(args.config) as file:
         cfg = yaml.safe_load(file)
