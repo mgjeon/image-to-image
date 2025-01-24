@@ -4,13 +4,27 @@ def get_fake_target(model, cfg, args, inputs, device):
     if cfg['model']['name'] == 'gan':
         fake_targets = model(inputs)
     elif cfg['model']['name'] == 'diffusion':
-        fake_targets = sample_image(
+        output = sample_image(
             config=cfg,
             model=model,
             input_image=inputs,
             initial_noise=None,
             device=device,
             create_list=False,
-            args=args
+            args=args,
+            return_seq=args.return_seq
         )
-    return fake_targets
+        if args.return_seq:
+            fake_targets, seq, timesteps = output
+        else:
+            fake_targets = output
+
+    res = {}
+    res['fake_targets'] = fake_targets
+    try:
+        if args.return_seq:
+            res['seq'] = seq
+            res['timesteps'] = timesteps
+    except:
+        pass
+    return res

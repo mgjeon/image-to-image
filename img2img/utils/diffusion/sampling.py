@@ -9,7 +9,7 @@ def compute_alpha(betas, t):
     a = (1 - betas).cumprod(dim=0).index_select(0, t + 1).view(-1, 1, 1, 1)
     return a
 
-def sample_image(*, config, model, input_image, initial_noise=None, device=None, create_list=False, verbose=False, args=None):
+def sample_image(*, config, model, input_image, initial_noise=None, device=None, create_list=False, verbose=False, args=None, return_seq=False):
     if device is None:
         device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     else:
@@ -103,10 +103,13 @@ def sample_image(*, config, model, input_image, initial_noise=None, device=None,
                 xs.append(xt_next.to('cpu'))
             else:
                 xt = xt_next
+                
 
     if create_list:
         return xs, x0_preds
     else:
+        if return_seq:
+            return xt, seq, timesteps
         return xt
     
 # Test ========================================================================

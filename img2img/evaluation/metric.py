@@ -23,8 +23,15 @@ def get_mask_within_disk(smap, margin=0):
     mask = dist <= smap.meta['r_sun'] - margin  # Mask points inside the circle
     return mask
 
-def calculate_metrics(model, cfg, dataset, loader, device, out_dir, csv_dir, args, stage):
-    (out_dir/stage).mkdir(parents=True, exist_ok=True)
+def calculate_metrics(model, cfg, dataset, loader, device, out_dir, csv_dir, args, stage, ckpt_path):
+    out_dir = out_dir / stage
+    csv_dir = csv_dir / stage
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    csv_dir.mkdir(parents=True, exist_ok=True)
+
+    with open(csv_dir / "ckpt.txt", 'w') as f:
+        f.write(str(ckpt_path.resolve()))
 
     metrics = {
         'Normalized_All': {'obstime': [], 'MAE': [], 'Pearson CC': [], 'PSNR': [], 'SSIM': []},
@@ -44,14 +51,27 @@ def calculate_metrics(model, cfg, dataset, loader, device, out_dir, csv_dir, arg
             timestamp = timestamp[:10] + timestamp[10:].replace("-", ":")
 
             if args.save_meta:
-                save_file_path = out_dir / stage / f"{target_name[0]}_fake.npz"
+                save_file_path = out_dir / f"{target_name[0]}_fake.npz"
             else:
-                save_file_path = out_dir / stage / f"{target_name[0]}_fake.npy"
+                save_file_path = out_dir / f"{target_name[0]}_fake.npy"
 
             if not save_file_path.exists():
                 inputs = inputs.to(device)
-                fake_target = get_fake_target(model, cfg, args, inputs, device)
+                res = get_fake_target(model, cfg, args, inputs, device)
+                fake_target = res['fake_targets']
                 fake_target = torch.clamp(fake_target, min=-1.0, max=1.0)
+
+                if i == 0:
+                    try:
+                        if args.return_seq:
+                            seq = res['seq']
+                            timesteps = res['timesteps']
+                            with open(csv_dir / "seq.txt", 'w') as f:
+                                f.write(str(seq))
+                                f.write("\n")
+                                f.write(str(timesteps))
+                    except:
+                        pass
 
                 if args.save_meta:
                     target_file = Path(dataset.target_dir) / (str(target_name[0]) + ".npz")
@@ -75,7 +95,7 @@ def calculate_metrics(model, cfg, dataset, loader, device, out_dir, csv_dir, arg
 
             if i == 0:
                 fig = dataset.create_figure(inputs[0], real_target[0], fake_target[0])
-                fig.savefig(csv_dir / f"{stage}_example.png")
+                fig.savefig(csv_dir / f"example_{target_name[0][:19]}.png")
                 # print("Input        ", inputs.shape)
                 # print("Target (Real)", real_target.shape)
                 # print("Target (Fake)", fake_target.shape)
@@ -153,7 +173,7 @@ def calculate_metrics(model, cfg, dataset, loader, device, out_dir, csv_dir, arg
             torch.cuda.empty_cache()
 
             df_normalized_all = pd.DataFrame.from_dict(data=metrics['Normalized_All'])
-            df_normalized_all.to_csv(csv_dir / f"{stage}_metrics_normalized_all.csv", index=False)
+            df_normalized_all.to_csv(csv_dir / "metrics_normalized_all.csv", index=False)
 
             if args.use_sunpy_map:
                 df_normalized_within_disk = pd.DataFrame.from_dict(data=metrics['Normalized_WithinDisk'])
@@ -163,11 +183,11 @@ def calculate_metrics(model, cfg, dataset, loader, device, out_dir, csv_dir, arg
                 df_denormalized_outside_disk = pd.DataFrame.from_dict(data=metrics['Denormalized_OutsideDisk'])
 
                 
-                df_normalized_within_disk.to_csv(csv_dir / f"{stage}_metrics_normalized_within_disk.csv", index=False)
-                df_normalized_outside_disk.to_csv(csv_dir / f"{stage}_metrics_normalized_outside_disk.csv", index=False)
-                df_denormalized_all.to_csv(csv_dir / f"{stage}_metrics_denormalized_all.csv", index=False)
-                df_denormalized_within_disk.to_csv(csv_dir / f"{stage}_metrics_denormalized_within_disk.csv", index=False)
-                df_denormalized_outside_disk.to_csv(csv_dir / f"{stage}_metrics_denormalized_outside_disk.csv", index=False)
+                df_normalized_within_disk.to_csv(csv_dir / "metrics_normalized_within_disk.csv", index=False)
+                df_normalized_outside_disk.to_csv(csv_dir / "metrics_normalized_outside_disk.csv", index=False)
+                df_denormalized_all.to_csv(csv_dir / "metrics_denormalized_all.csv", index=False)
+                df_denormalized_within_disk.to_csv(csv_dir / f"metrics_denormalized_within_disk.csv", index=False)
+                df_denormalized_outside_disk.to_csv(csv_dir / "metrics_denormalized_outside_disk.csv", index=False)
         
         li = []
         ty = []
