@@ -13,3 +13,4 @@
 **/data/sdo/rename.ipynb
 **/data/sdo/scp.sh
 **/*.egg-info/
+notebooks/diffusion/
